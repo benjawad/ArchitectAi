@@ -368,7 +368,6 @@ with gr.Blocks(
                             label="📊 Class Diagram",
                             type="pil",
                             elem_classes=["diagram-container"],
-                            show_download_button=True
                         )
                     
                     with gr.Accordion("📝 PlantUML Source", open=False):
@@ -421,7 +420,6 @@ with gr.Blocks(
                             label="🗺️ Project Architecture",
                             type="pil",
                             elem_classes=["diagram-container"],
-                            show_download_button=True
                         )
                     
                     with gr.Accordion("📝 PlantUML Source", open=False):
@@ -482,7 +480,6 @@ with gr.Blocks(
                             label="🎨 Proposed Architecture (After Refactoring)",
                             type="pil",
                             elem_classes=["diagram-container"],
-                            show_download_button=True
                         )
                     
                     with gr.Accordion("📝 Proposed PlantUML", open=False):
