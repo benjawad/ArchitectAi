@@ -1,0 +1,16 @@
+fastmcp
+langchain
+langchain-openai
+langchain-core
+pydantic
+pydantic-settings
+python-dotenv
+httpx
+httpcore
+openai
+gradio==6.0.0
+plantuml
+Pillow
+modal
+radon
+gitpython
