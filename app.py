@@ -519,65 +519,7 @@ with gr.Blocks(
                 inputs=project_zip,
                 outputs=[text_output_2, img_output_2, status_banner_2]
             )
-        # === TAB 3: AI PROPOSAL ===
-        with gr.Tab("✨ AI Refactoring Proposal", id=2):
-            gr.Markdown("""
-                ### Intelligent Architecture Recommendations
-                Let AI analyze your codebase and suggest design pattern improvements.
-            """)
-            
-            gr.HTML("""
-                <div class="info-card">
-                    <strong>🧠 AI-Powered:</strong> Detects anti-patterns like God Objects, 
-                    suggests appropriate design patterns (Strategy, Factory, Singleton, etc.), 
-                    and generates before/after UML diagrams.
-                </div>
-            """)
-            
-            with gr.Row():
-                with gr.Column(scale=1):
-                    proposal_input = gr.Textbox(
-                        label="Project Path",
-                        placeholder="C:\\Path\\To\\Your\\Project",
-                        lines=1
-                    )
-                    
-                    propose_btn = gr.Button(
-                        "🧠 Generate Proposal",
-                        variant="primary",
-                        size="lg",
-                        elem_classes=["primary-button"]
-                    )
-                    
-                    status_banner_3 = gr.Markdown(visible=False, elem_classes=["banner"])
-                    
-                    with gr.Group():
-                        proposal_output = gr.Code(
-                            language="json",
-                            label="📋 AI Analysis & Recommendations",
-                            lines=15,
-                        )
-                
-                with gr.Column(scale=1):
-                    with gr.Group():
-                        img_output_3 = gr.Image(
-                            label="🎨 Proposed Architecture (After Refactoring)",
-                            type="pil",
-                            elem_classes=["diagram-container"],
-                        )
-                    
-                    with gr.Accordion("📝 Proposed PlantUML", open=False):
-                        text_output_3 = gr.Code(
-                            language="markdown",
-                            label="PlantUML Code",
-                            lines=10
-                        )
-            
-            propose_btn.click(
-                fn=process_proposal,
-                inputs=proposal_input,
-                outputs=[proposal_output, text_output_3, img_output_3, status_banner_3]
-            )
+       
         # === TAB 3: AI PROPOSAL ===
         with gr.Tab("✨ AI Refactoring Proposal", id=2):
             gr.Markdown("""
