@@ -433,57 +433,6 @@ with gr.Blocks(
         with gr.Tab("📂 Project Architecture Map", id=1):
             gr.Markdown("""
                 ### Full Project Analysis
-                Scan an entire codebase and visualize all classes, relationships, and dependencies.
-            """)
-            
-            gr.HTML("""
-                <div class="info-card">
-                    <strong>💡 Tip:</strong> Works best with projects containing 5-50 Python files.
-                    Large projects may take 30-60 seconds to analyze.
-                </div>
-            """)
-            
-            with gr.Row():
-                with gr.Column(scale=1):
-                    folder_input = gr.Textbox(
-                        label="Project Path",
-                        info="Absolute path to your Python project directory",
-                        lines=1
-                    )
-                    
-                    scan_btn = gr.Button(
-                        "🔍 Scan Project",
-                        variant="primary",
-                        size="lg",
-                        elem_classes=["primary-button"]
-                    )
-                
-                with gr.Column(scale=1):
-                    status_banner_2 = gr.Markdown(visible=False, elem_classes=["banner"])
-                    
-                    with gr.Group():
-                        img_output_2 = gr.Image(
-                            label="🗺️ Project Architecture",
-                            type="pil",
-                            elem_classes=["diagram-container"],
-                        )
-                    
-                    with gr.Accordion("📝 PlantUML Source", open=False):
-                        text_output_2 = gr.Code(
-                            language="markdown",
-                            label="PlantUML Code",
-                            lines=10
-                        )
-            
-            scan_btn.click(
-                fn=process_folder,
-                inputs=folder_input,
-                outputs=[text_output_2, img_output_2, status_banner_2]
-            )
-        # === TAB 2: PROJECT MAP ===
-        with gr.Tab("📂 Project Architecture Map", id=1):
-            gr.Markdown("""
-                ### Full Project Analysis
                 Upload a ZIP file of your Python project to visualize all classes and relationships.
             """)
             
