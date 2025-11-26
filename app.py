@@ -385,39 +385,61 @@ def process_folder_usecase_multi(folder_path: str, enrich: bool = True, provider
         error_detail = traceback.format_exc()
         logging.error(f"Multi-diagram error: {error_detail}")
         return f"❌ Error: {e}\n\nDetails:\n{error_detail}", [], [], None, "", gr.update(visible=True, value=f"❌ Failed")
+
 def process_folder_usecase_multi_zip(zip_path, enrich: bool = True, provider: str = "sambanova", progress=gr.Progress()):
     """TAB 3: Multi-Module Use Cases from ZIP file"""
+    
+    # ✅ FIX: Check if zip_path is provided and is a valid file
     if not zip_path:
         return "⚠️ Please upload a ZIP file.", [], [], None, "", gr.update(visible=True, value="⚠️ No File")
+    
+    # ✅ FIX: Check if the file exists and is a valid ZIP
+    zip_file = Path(zip_path)
+    if not zip_file.exists():
+        return "❌ File not found.", [], [], None, "", gr.update(visible=True, value="❌ File Not Found")
+    
+    if not zip_file.suffix.lower() == '.zip':
+        return "❌ Please upload a ZIP file.", [], [], None, "", gr.update(visible=True, value="❌ Invalid File Type")
     
     temp_dir = None
     try:
         temp_dir = tempfile.mkdtemp()
+        logging.info(f"📁 Created temp directory: {temp_dir}")
         
         progress(0.1, desc="📦 Extracting ZIP...")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(temp_dir)
         
-        progress(0.2, desc="Scanning Python files...")
+        # ✅ FIX: Add error handling for ZIP extraction
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(temp_dir)
+            logging.info(f"✅ Extracted ZIP to: {temp_dir}")
+        except zipfile.BadZipFile:
+            return "❌ Invalid or corrupted ZIP file.", [], [], None, "", gr.update(visible=True, value="❌ Bad ZIP")
+        
+        progress(0.2, desc="🔍 Scanning Python files...")
         
         file_contents = {}
         file_count = 0
         
+        # ✅ FIX: Use temp_dir (not zip_path) to scan files
         for file_path in Path(temp_dir).rglob("*.py"):
             parts = file_path.parts
-            if any(p.startswith(".") or p in ["venv", "env", "__pycache__", "node_modules"] for p in parts):
+            if any(p.startswith(".") or p in ["venv", "env", "__pycache__", "node_modules", "__MACOSX"] for p in parts):
                 continue
             try:
                 code = file_path.read_text(encoding='utf-8', errors='replace')
                 rel_path = file_path.relative_to(temp_dir)
                 file_contents[str(rel_path)] = code
                 file_count += 1
-            except Exception:
+                logging.info(f"📄 Found file: {rel_path}")
+            except Exception as e:
+                logging.warning(f"⚠️ Failed to read {file_path}: {e}")
                 continue
         
         if not file_contents:
-            return "⚠️ No Python files found.", [], [], None, "", gr.update(visible=True, value="⚠️ No Files")
+            return f"⚠️ No Python files found in ZIP. Extracted to: {temp_dir}", [], [], None, "", gr.update(visible=True, value="⚠️ No Files")
         
+        logging.info(f"✅ Found {file_count} Python files")
         progress(0.5, desc=f"🎯 Analyzing {file_count} files by module...")
         
         llm = None
@@ -426,10 +448,10 @@ def process_folder_usecase_multi_zip(zip_path, enrich: bool = True, provider: st
         
         service = UseCaseDiagramService(llm=llm)
         
-        if hasattr(service, 'generate_modular'):
-            diagrams_dict = service.generate_modular(file_contents, enrich=enrich)
-        else:
+        if not hasattr(service, 'generate_modular'):
             return "⚠️ Please update usecase_service.py with multi-module support", [], [], None, "", gr.update(visible=True, value="⚠️ Update Required")
+        
+        diagrams_dict = service.generate_modular(file_contents, enrich=enrich)
         
         if "error" in diagrams_dict:
             return diagrams_dict["error"], [], [], None, "", gr.update(visible=True, value="❌ Failed")
@@ -451,11 +473,11 @@ def process_folder_usecase_multi_zip(zip_path, enrich: bool = True, provider: st
                 })
         
         if not diagram_outputs:
-            return "⚠️ No diagrams generated.", [], [], None, "", gr.update(visible=True, value="⚠️ No Diagrams")
+            return "⚠️ No diagrams generated. Check if your code has classes/methods.", [], [], None, "", gr.update(visible=True, value="⚠️ No Diagrams")
         
         progress(1.0, desc="✅ Complete!")
         
-        summary = f"✅ Generated {len(diagram_outputs)} Use Case diagrams:\n\n"
+        summary = f"✅ Generated {len(diagram_outputs)} Use Case diagrams from {file_count} files:\n\n"
         summary += "\n".join([f"📊 {d['module']}" for d in diagram_outputs])
         
         module_names = [d["module"] for d in diagram_outputs]
@@ -474,45 +496,68 @@ def process_folder_usecase_multi_zip(zip_path, enrich: bool = True, provider: st
     except Exception as e:
         import traceback
         error_detail = traceback.format_exc()
-        logging.error(f"Multi-diagram error: {error_detail}")
+        logging.error(f"❌ Multi-diagram error: {error_detail}")
         return f"❌ Error: {e}\n\nDetails:\n{error_detail}", [], [], None, "", gr.update(visible=True, value=f"❌ Failed")
     finally:
         safe_cleanup(temp_dir)
 
+
+
 # --- TAB 4: sequence diagrams ---
 def process_folder_sequence_multi_zip(zip_path, enrich: bool = False, provider: str = "sambanova", progress=gr.Progress()):
     """TAB 4: Multi-Module Sequences from ZIP file"""
+    
+    # ✅ FIX: Check if zip_path is provided and is a valid file
     if not zip_path:
         return "⚠️ Please upload a ZIP file.", [], [], None, "", gr.update(visible=True, value="⚠️ No File")
+    
+    # ✅ FIX: Check if the file exists and is a valid ZIP
+    zip_file = Path(zip_path)
+    if not zip_file.exists():
+        return "❌ File not found.", [], [], None, "", gr.update(visible=True, value="❌ File Not Found")
+    
+    if not zip_file.suffix.lower() == '.zip':
+        return "❌ Please upload a ZIP file.", [], [], None, "", gr.update(visible=True, value="❌ Invalid File Type")
     
     temp_dir = None
     try:
         temp_dir = tempfile.mkdtemp()
+        logging.info(f"📁 Created temp directory: {temp_dir}")
         
         progress(0.1, desc="📦 Extracting ZIP...")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(temp_dir)
         
-        progress(0.2, desc="Scanning Python files...")
+        # ✅ FIX: Add error handling for ZIP extraction
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(temp_dir)
+            logging.info(f"✅ Extracted ZIP to: {temp_dir}")
+        except zipfile.BadZipFile:
+            return "❌ Invalid or corrupted ZIP file.", [], [], None, "", gr.update(visible=True, value="❌ Bad ZIP")
+        
+        progress(0.2, desc="🔍 Scanning Python files...")
         
         file_contents = {}
         file_count = 0
         
+        # ✅ FIX: Use temp_dir (not zip_path) to scan files
         for file_path in Path(temp_dir).rglob("*.py"):
             parts = file_path.parts
-            if any(p.startswith(".") or p in ["venv", "env", "__pycache__", "node_modules"] for p in parts):
+            if any(p.startswith(".") or p in ["venv", "env", "__pycache__", "node_modules", "__MACOSX"] for p in parts):
                 continue
             try:
                 code = file_path.read_text(encoding='utf-8', errors='replace')
                 rel_path = file_path.relative_to(temp_dir)
                 file_contents[str(rel_path)] = code
                 file_count += 1
-            except Exception:
+                logging.info(f"📄 Found file: {rel_path}")
+            except Exception as e:
+                logging.warning(f"⚠️ Failed to read {file_path}: {e}")
                 continue
         
         if not file_contents:
-            return "⚠️ No Python files found.", [], [], None, "", gr.update(visible=True, value="⚠️ No Files")
+            return f"⚠️ No Python files found in ZIP. Extracted to: {temp_dir}", [], [], None, "", gr.update(visible=True, value="⚠️ No Files")
         
+        logging.info(f"✅ Found {file_count} Python files")
         progress(0.5, desc=f"🎬 Analyzing {file_count} files by module...")
         
         llm = None
@@ -547,11 +592,11 @@ def process_folder_sequence_multi_zip(zip_path, enrich: bool = False, provider: 
                 })
         
         if not diagram_outputs:
-            return "⚠️ No diagrams generated.", [], [], None, "", gr.update(visible=True, value="⚠️ No Diagrams")
+            return "⚠️ No diagrams generated. Check if your code has method calls.", [], [], None, "", gr.update(visible=True, value="⚠️ No Diagrams")
         
         progress(1.0, desc="✅ Complete!")
         
-        summary = f"✅ Generated {len(diagram_outputs)} Sequence diagrams:\n\n"
+        summary = f"✅ Generated {len(diagram_outputs)} Sequence diagrams from {file_count} files:\n\n"
         summary += "\n".join([f"🎬 {d['module']}" for d in diagram_outputs])
         
         module_names = [d["module"] for d in diagram_outputs]
@@ -570,7 +615,7 @@ def process_folder_sequence_multi_zip(zip_path, enrich: bool = False, provider: 
     except Exception as e:
         import traceback
         error_detail = traceback.format_exc()
-        logging.error(f"Multi-sequence error: {error_detail}")
+        logging.error(f"❌ Multi-sequence error: {error_detail}")
         return f"❌ Error: {e}\n\nDetails:\n{error_detail}", [], [], None, "", gr.update(visible=True, value=f"❌ Failed")
     finally:
         safe_cleanup(temp_dir)
