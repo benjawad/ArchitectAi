@@ -481,50 +481,50 @@ with gr.Blocks(
                 outputs=[text_output_2, img_output_2, status_banner_2]
             )
         # === TAB 2: PROJECT MAP ===
-with gr.Tab("📂 Project Architecture Map", id=1):
-    gr.Markdown("""
-        ### Full Project Analysis
-        Upload a ZIP file of your Python project to visualize all classes and relationships.
-    """)
-    
-    gr.HTML("""
-        <div class="info-card">
-            <strong>💡 Tip:</strong> Create a ZIP of your project folder. Works best with 5-50 Python files.
-        </div>
-    """)
-    
-    with gr.Row():
-        with gr.Column(scale=1):
-            project_zip = gr.File(
-                label="📦 Upload Project (ZIP)",
-                file_types=[".zip"],
-                type="filepath"
-            )
+        with gr.Tab("📂 Project Architecture Map", id=1):
+            gr.Markdown("""
+                ### Full Project Analysis
+                Upload a ZIP file of your Python project to visualize all classes and relationships.
+            """)
             
-            scan_btn = gr.Button(
-                "🔍 Scan Project",
-                variant="primary",
-                size="lg",
-                elem_classes=["primary-button"]
-            )
-        
-        with gr.Column(scale=1):
-            status_banner_2 = gr.Markdown(visible=False, elem_classes=["banner"])
+            gr.HTML("""
+                <div class="info-card">
+                    <strong>💡 Tip:</strong> Create a ZIP of your project folder. Works best with 5-50 Python files.
+                </div>
+            """)
             
-            with gr.Group():
-                img_output_2 = gr.Image(
-                    label="🗺️ Project Architecture",
-                    type="pil",
-                    elem_classes=["diagram-container"],
-                )
+            with gr.Row():
+                with gr.Column(scale=1):
+                    project_zip = gr.File(
+                        label="📦 Upload Project (ZIP)",
+                        file_types=[".zip"],
+                        type="filepath"
+                    )
+                    
+                    scan_btn = gr.Button(
+                        "🔍 Scan Project",
+                        variant="primary",
+                        size="lg",
+                        elem_classes=["primary-button"]
+                    )
+                
+                with gr.Column(scale=1):
+                    status_banner_2 = gr.Markdown(visible=False, elem_classes=["banner"])
+                    
+                    with gr.Group():
+                        img_output_2 = gr.Image(
+                            label="🗺️ Project Architecture",
+                            type="pil",
+                            elem_classes=["diagram-container"],
+                        )
+                    
+                    with gr.Accordion("📝 PlantUML Source", open=False):
+                        text_output_2 = gr.Code(
+                            language="markdown",
+                            label="PlantUML Code",
+                            lines=10
+                        )
             
-            with gr.Accordion("📝 PlantUML Source", open=False):
-                text_output_2 = gr.Code(
-                    language="markdown",
-                    label="PlantUML Code",
-                    lines=10
-                )
-    
             scan_btn.click(
                 fn=process_zip_upload,
                 inputs=project_zip,
