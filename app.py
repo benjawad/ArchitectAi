@@ -385,8 +385,195 @@ def process_folder_usecase_multi(folder_path: str, enrich: bool = True, provider
         error_detail = traceback.format_exc()
         logging.error(f"Multi-diagram error: {error_detail}")
         return f"❌ Error: {e}\n\nDetails:\n{error_detail}", [], [], None, "", gr.update(visible=True, value=f"❌ Failed")
+def process_folder_usecase_multi_zip(zip_path, enrich: bool = True, provider: str = "sambanova", progress=gr.Progress()):
+    """TAB 3: Multi-Module Use Cases from ZIP file"""
+    if not zip_path:
+        return "⚠️ Please upload a ZIP file.", [], [], None, "", gr.update(visible=True, value="⚠️ No File")
+    
+    temp_dir = None
+    try:
+        temp_dir = tempfile.mkdtemp()
+        
+        progress(0.1, desc="📦 Extracting ZIP...")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+        
+        progress(0.2, desc="Scanning Python files...")
+        
+        file_contents = {}
+        file_count = 0
+        
+        for file_path in Path(temp_dir).rglob("*.py"):
+            parts = file_path.parts
+            if any(p.startswith(".") or p in ["venv", "env", "__pycache__", "node_modules"] for p in parts):
+                continue
+            try:
+                code = file_path.read_text(encoding='utf-8', errors='replace')
+                rel_path = file_path.relative_to(temp_dir)
+                file_contents[str(rel_path)] = code
+                file_count += 1
+            except Exception:
+                continue
+        
+        if not file_contents:
+            return "⚠️ No Python files found.", [], [], None, "", gr.update(visible=True, value="⚠️ No Files")
+        
+        progress(0.5, desc=f"🎯 Analyzing {file_count} files by module...")
+        
+        llm = None
+        if enrich:
+            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        
+        service = UseCaseDiagramService(llm=llm)
+        
+        if hasattr(service, 'generate_modular'):
+            diagrams_dict = service.generate_modular(file_contents, enrich=enrich)
+        else:
+            return "⚠️ Please update usecase_service.py with multi-module support", [], [], None, "", gr.update(visible=True, value="⚠️ Update Required")
+        
+        if "error" in diagrams_dict:
+            return diagrams_dict["error"], [], [], None, "", gr.update(visible=True, value="❌ Failed")
+        
+        progress(0.8, desc="🎨 Rendering diagrams...")
+        
+        diagram_outputs = []
+        
+        for module_name, puml_text in diagrams_dict.items():
+            if "error" in module_name.lower():
+                continue
+            text, image = render_plantuml(puml_text)
+            
+            if image:
+                diagram_outputs.append({
+                    "module": module_name,
+                    "image": image,
+                    "puml": puml_text
+                })
+        
+        if not diagram_outputs:
+            return "⚠️ No diagrams generated.", [], [], None, "", gr.update(visible=True, value="⚠️ No Diagrams")
+        
+        progress(1.0, desc="✅ Complete!")
+        
+        summary = f"✅ Generated {len(diagram_outputs)} Use Case diagrams:\n\n"
+        summary += "\n".join([f"📊 {d['module']}" for d in diagram_outputs])
+        
+        module_names = [d["module"] for d in diagram_outputs]
+        first_img = diagram_outputs[0]["image"] if diagram_outputs else None
+        first_puml = diagram_outputs[0]["puml"] if diagram_outputs else ""
+        
+        return (
+            summary,
+            diagram_outputs,
+            gr.update(choices=module_names, value=module_names[0] if module_names else None),
+            first_img,
+            first_puml,
+            gr.update(visible=True, value=f"✅ {len(diagram_outputs)} Modules")
+        )
+        
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        logging.error(f"Multi-diagram error: {error_detail}")
+        return f"❌ Error: {e}\n\nDetails:\n{error_detail}", [], [], None, "", gr.update(visible=True, value=f"❌ Failed")
+    finally:
+        safe_cleanup(temp_dir)
 
 # --- TAB 4: sequence diagrams ---
+def process_folder_sequence_multi_zip(zip_path, enrich: bool = False, provider: str = "sambanova", progress=gr.Progress()):
+    """TAB 4: Multi-Module Sequences from ZIP file"""
+    if not zip_path:
+        return "⚠️ Please upload a ZIP file.", [], [], None, "", gr.update(visible=True, value="⚠️ No File")
+    
+    temp_dir = None
+    try:
+        temp_dir = tempfile.mkdtemp()
+        
+        progress(0.1, desc="📦 Extracting ZIP...")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+        
+        progress(0.2, desc="Scanning Python files...")
+        
+        file_contents = {}
+        file_count = 0
+        
+        for file_path in Path(temp_dir).rglob("*.py"):
+            parts = file_path.parts
+            if any(p.startswith(".") or p in ["venv", "env", "__pycache__", "node_modules"] for p in parts):
+                continue
+            try:
+                code = file_path.read_text(encoding='utf-8', errors='replace')
+                rel_path = file_path.relative_to(temp_dir)
+                file_contents[str(rel_path)] = code
+                file_count += 1
+            except Exception:
+                continue
+        
+        if not file_contents:
+            return "⚠️ No Python files found.", [], [], None, "", gr.update(visible=True, value="⚠️ No Files")
+        
+        progress(0.5, desc=f"🎬 Analyzing {file_count} files by module...")
+        
+        llm = None
+        if enrich:
+            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        
+        service = SequenceDiagramService(llm=llm)
+        
+        if not hasattr(service, 'generate_modular'):
+            return "⚠️ Please update sequence_service.py with multi-module support", [], [], None, "", gr.update(visible=True, value="⚠️ Update Required")
+        
+        diagrams_dict = service.generate_modular(file_contents, enrich=enrich)
+        
+        if "error" in diagrams_dict:
+            return diagrams_dict["error"], [], [], None, "", gr.update(visible=True, value="❌ Failed")
+        
+        progress(0.8, desc="🎨 Rendering diagrams...")
+        
+        diagram_outputs = []
+        
+        for module_name, puml_text in diagrams_dict.items():
+            if "error" in module_name.lower():
+                continue
+            
+            text, image = render_plantuml(puml_text)
+            
+            if image:
+                diagram_outputs.append({
+                    "module": module_name,
+                    "image": image,
+                    "puml": puml_text
+                })
+        
+        if not diagram_outputs:
+            return "⚠️ No diagrams generated.", [], [], None, "", gr.update(visible=True, value="⚠️ No Diagrams")
+        
+        progress(1.0, desc="✅ Complete!")
+        
+        summary = f"✅ Generated {len(diagram_outputs)} Sequence diagrams:\n\n"
+        summary += "\n".join([f"🎬 {d['module']}" for d in diagram_outputs])
+        
+        module_names = [d["module"] for d in diagram_outputs]
+        first_img = diagram_outputs[0]["image"] if diagram_outputs else None
+        first_puml = diagram_outputs[0]["puml"] if diagram_outputs else ""
+        
+        return (
+            summary,
+            diagram_outputs,
+            gr.update(choices=module_names, value=module_names[0] if module_names else None),
+            first_img,
+            first_puml,
+            gr.update(visible=True, value=f"✅ {len(diagram_outputs)} Modules")
+        )
+        
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        logging.error(f"Multi-sequence error: {error_detail}")
+        return f"❌ Error: {e}\n\nDetails:\n{error_detail}", [], [], None, "", gr.update(visible=True, value=f"❌ Failed")
+    finally:
+        safe_cleanup(temp_dir)
 
 def process_sequence_snippet(code_snippet: str, entry_method: str = None, enrich: bool = True, provider: str = "sambanova"):
     """TAB 1C: Single File Sequence Diagram"""
@@ -847,7 +1034,11 @@ with gr.Blocks(
             
             with gr.Row():
                 with gr.Column(scale=1):
-                    multi_folder_input = gr.Textbox(label="Project Path", info="Path to your Python project", lines=1)
+                    multi_zip_input = gr.File(
+                            label="📦 Upload Project ZIP",
+                            file_types=[".zip"],
+                            type="filepath"
+                        )
                     
                     with gr.Row():
                         multi_provider = gr.Dropdown(choices=["sambanova", "nebius", "openai"], value="sambanova", label="LLM Provider")
@@ -878,7 +1069,7 @@ with gr.Blocks(
                         return d["image"], d["puml"]
                 return None, ""
             
-            multi_scan_btn.click(fn=process_folder_usecase_multi, inputs=[multi_folder_input, multi_enrich, multi_provider], outputs=[multi_summary, multi_gallery, multi_module_selector, multi_diagram_img, multi_diagram_puml, multi_status_banner])
+            multi_scan_btn.click(fn=process_folder_usecase_multi, inputs=[multi_zip_input, multi_enrich, multi_provider], outputs=[multi_summary, multi_gallery, multi_module_selector, multi_diagram_img, multi_diagram_puml, multi_status_banner])
             multi_module_selector.change(fn=update_diagram_viewer, inputs=[multi_gallery, multi_module_selector], outputs=[multi_diagram_img, multi_diagram_puml])
         
         # TAB 4: MULTI-MODULE SEQUENCES
@@ -889,8 +1080,12 @@ with gr.Blocks(
             
             with gr.Row():
                 with gr.Column(scale=1):
-                    seq_multi_folder_input = gr.Textbox(label="Project Path", info="Path to your Python project", lines=1)
-                    
+                    seq_multi_zip_input = gr.File(
+                        label="📦 Upload Project ZIP",
+                        file_types=[".zip"],
+                        type="filepath"
+                    )
+
                     with gr.Row():
                         seq_multi_provider = gr.Dropdown(choices=["sambanova", "nebius", "openai"], value="sambanova", label="LLM Provider")
                         seq_multi_enrich = gr.Checkbox(label="✨ AI Enrichment", value=False, info="Slow but better names")
@@ -920,7 +1115,7 @@ with gr.Blocks(
                         return d["image"], d["puml"]
                 return None, ""
             
-            seq_multi_scan_btn.click(fn=process_folder_sequence_multi, inputs=[seq_multi_folder_input, seq_multi_enrich, seq_multi_provider], outputs=[seq_multi_summary, seq_multi_gallery, seq_multi_module_selector, seq_multi_diagram_img, seq_multi_diagram_puml, seq_multi_status_banner])
+            seq_multi_scan_btn.click(fn=process_folder_sequence_multi, inputs=[seq_multi_zip_input, seq_multi_enrich, seq_multi_provider], outputs=[seq_multi_summary, seq_multi_gallery, seq_multi_module_selector, seq_multi_diagram_img, seq_multi_diagram_puml, seq_multi_status_banner])
             seq_multi_module_selector.change(fn=update_seq_diagram_viewer, inputs=[seq_multi_gallery, seq_multi_module_selector], outputs=[seq_multi_diagram_img, seq_multi_diagram_puml])
     
 
