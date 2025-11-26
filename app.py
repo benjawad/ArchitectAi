@@ -1114,7 +1114,7 @@ with gr.Blocks(
                         return d["image"], d["puml"]
                 return None, ""
             
-            multi_scan_btn.click(fn=process_folder_usecase_multi, inputs=[multi_zip_input, multi_enrich, multi_provider], outputs=[multi_summary, multi_gallery, multi_module_selector, multi_diagram_img, multi_diagram_puml, multi_status_banner])
+            multi_scan_btn.click(fn=process_folder_usecase_multi_zip, inputs=[multi_zip_input, multi_enrich, multi_provider], outputs=[multi_summary, multi_gallery, multi_module_selector, multi_diagram_img, multi_diagram_puml, multi_status_banner])
             multi_module_selector.change(fn=update_diagram_viewer, inputs=[multi_gallery, multi_module_selector], outputs=[multi_diagram_img, multi_diagram_puml])
         
         # TAB 4: MULTI-MODULE SEQUENCES
@@ -1160,7 +1160,7 @@ with gr.Blocks(
                         return d["image"], d["puml"]
                 return None, ""
             
-            seq_multi_scan_btn.click(fn=process_folder_sequence_multi, inputs=[seq_multi_zip_input, seq_multi_enrich, seq_multi_provider], outputs=[seq_multi_summary, seq_multi_gallery, seq_multi_module_selector, seq_multi_diagram_img, seq_multi_diagram_puml, seq_multi_status_banner])
+            seq_multi_scan_btn.click(fn=process_folder_sequence_multi_zip, inputs=[seq_multi_zip_input, seq_multi_enrich, seq_multi_provider], outputs=[seq_multi_summary, seq_multi_gallery, seq_multi_module_selector, seq_multi_diagram_img, seq_multi_diagram_puml, seq_multi_status_banner])
             seq_multi_module_selector.change(fn=update_seq_diagram_viewer, inputs=[seq_multi_gallery, seq_multi_module_selector], outputs=[seq_multi_diagram_img, seq_multi_diagram_puml])
     
 
