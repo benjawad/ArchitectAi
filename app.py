@@ -12,6 +12,9 @@ from pathlib import Path
 from PIL import Image
 from plantuml import PlantUML
 
+from services.sequence_service import CallGraphVisitor, ProjectSequenceAnalyzer, SequenceDiagramService
+from services.usecase_service import UseCaseDiagramService
+
 # --- SETUP PATHS ---
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -228,7 +231,338 @@ def process_zip_upload(zip_path, progress=gr.Progress()):
     finally:
         safe_cleanup(temp_dir)
 
-# --- TAB 3: AI PROPOSAL ---
+# -- TAB 3 : USE CASE DIAGRAM ---
+
+def process_usecase_snippet(code_snippet: str, enrich: bool = True, provider: str = "sambanova"):
+    """TAB 1B: Single File Use Case Diagram"""
+    if not code_snippet.strip():
+        return "⚠️ Please enter some code.", None, gr.update(visible=False)
+    
+    try:
+        llm = None
+        if enrich:
+            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        
+        service = UseCaseDiagramService(llm=llm)
+        puml_text = service.generate(code_snippet, enrich=enrich, include_all_classes=True)
+        text, image = render_plantuml(puml_text)
+        
+        return text, image, gr.update(visible=True, value="✅ Use Case Diagram Complete!")
+        
+    except Exception as e:
+        return f"❌ Error: {e}", None, gr.update(visible=True, value=f"❌ Error")
+
+def process_folder_usecase(folder_path: str, enrich: bool = True, provider: str = "sambanova", progress=gr.Progress()):
+    """TAB 2B: Project Use Case Diagram - SINGLE COMBINED"""
+    path_obj = Path(folder_path)
+    
+    if not path_obj.exists() or not path_obj.is_dir():
+        return "❌ Invalid path.", None, gr.update(visible=True, value="❌ Invalid Path")
+    
+    try:
+        progress(0.3, desc="Scanning Python files...")
+        
+        combined_code = []
+        file_count = 0
+        
+        for file_path in path_obj.rglob("*.py"):
+            parts = file_path.parts
+            if any(p.startswith(".") or p in ["venv", "env", "__pycache__", "node_modules"] for p in parts):
+                continue
+            try:
+                code = file_path.read_text(encoding='utf-8', errors='replace')
+                combined_code.append(f"# === File: {file_path.name} ===\n{code}")
+                file_count += 1
+            except Exception:
+                continue
+        
+        if not combined_code:
+            return "⚠️ No Python files found.", None, gr.update(visible=True, value="⚠️ No Files")
+        
+        progress(0.6, desc=f"Analyzing {file_count} files...")
+        
+        llm = None
+        if enrich:
+            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        
+        service = UseCaseDiagramService(llm=llm)
+        full_code = "\n\n".join(combined_code)[:50000]
+        puml_text = service.generate(full_code, enrich=enrich, include_all_classes=True)
+        
+        progress(0.9, desc="Rendering diagram...")
+        text, image = render_plantuml(puml_text)
+        
+        progress(1.0, desc="Complete!")
+        return text, image, gr.update(visible=True, value=f"✅ Analyzed {file_count} files")
+        
+    except Exception as e:
+        return f"❌ Error: {e}", None, gr.update(visible=True, value=f"❌ Failed")
+
+def process_folder_usecase_multi(folder_path: str, enrich: bool = True, provider: str = "sambanova", progress=gr.Progress()):
+    """TAB 3: Project Use Case Diagrams - MULTIPLE BY MODULE"""
+    path_obj = Path(folder_path)
+    
+    if not path_obj.exists() or not path_obj.is_dir():
+        return "❌ Invalid path.", [], [], None, "", gr.update(visible=True, value="❌ Invalid Path")
+    
+    try:
+        progress(0.2, desc="Scanning Python files...")
+        
+        file_contents = {}
+        file_count = 0
+        
+        for file_path in path_obj.rglob("*.py"):
+            parts = file_path.parts
+            if any(p.startswith(".") or p in ["venv", "env", "__pycache__", "node_modules"] for p in parts):
+                continue
+            try:
+                code = file_path.read_text(encoding='utf-8', errors='replace')
+                rel_path = file_path.relative_to(path_obj)
+                file_contents[str(rel_path)] = code
+                file_count += 1
+            except Exception:
+                continue
+        
+        if not file_contents:
+            return "⚠️ No Python files found.", [], [], None, "", gr.update(visible=True, value="⚠️ No Files")
+        
+        progress(0.5, desc=f"Analyzing {file_count} files by module...")
+        
+        llm = None
+        if enrich:
+            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        
+        service = UseCaseDiagramService(llm=llm)
+        
+        if hasattr(service, 'generate_modular'):
+            diagrams_dict = service.generate_modular(file_contents, enrich=enrich)
+        else:
+            return "⚠️ Please update usecase_service.py with multi-module support", [], [], None, "", gr.update(visible=True, value="⚠️ Update Required")
+        
+        if "error" in diagrams_dict:
+            return diagrams_dict["error"], [], [], None, "", gr.update(visible=True, value="❌ Failed")
+        
+        progress(0.8, desc="Rendering diagrams...")
+        
+        diagram_outputs = []
+        
+        for module_name, puml_text in diagrams_dict.items():
+            if "error" in module_name.lower():
+                continue
+            text, image = render_plantuml(puml_text)
+            
+            if image:
+                diagram_outputs.append({
+                    "module": module_name,
+                    "image": image,
+                    "puml": puml_text
+                })
+        
+        if not diagram_outputs:
+            return "⚠️ No diagrams generated.", [], [], None, "", gr.update(visible=True, value="⚠️ No Diagrams")
+        
+        progress(1.0, desc="Complete!")
+        
+        summary = f"✅ Generated {len(diagram_outputs)} Use Case diagrams:\n\n"
+        summary += "\n".join([f"📊 {d['module']}" for d in diagram_outputs])
+        
+        module_names = [d["module"] for d in diagram_outputs]
+        
+        first_img = diagram_outputs[0]["image"] if diagram_outputs else None
+        first_puml = diagram_outputs[0]["puml"] if diagram_outputs else ""
+        
+        return (
+            summary,
+            diagram_outputs,
+            gr.update(choices=module_names, value=module_names[0] if module_names else None),
+            first_img,
+            first_puml,
+            gr.update(visible=True, value=f"✅ {len(diagram_outputs)} Modules")
+        )
+        
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        logging.error(f"Multi-diagram error: {error_detail}")
+        return f"❌ Error: {e}\n\nDetails:\n{error_detail}", [], [], None, "", gr.update(visible=True, value=f"❌ Failed")
+
+# --- TAB 4: sequence diagrams ---
+
+def process_sequence_snippet(code_snippet: str, entry_method: str = None, enrich: bool = True, provider: str = "sambanova"):
+    """TAB 1C: Single File Sequence Diagram"""
+    if not code_snippet.strip():
+        return "⚠️ Please enter some code.", None, gr.update(visible=False), ""
+    
+    try:
+        llm = None
+        if enrich:
+            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        
+        service = SequenceDiagramService(llm=llm)
+        puml_text = service.generate(code_snippet, entry_method=entry_method, enrich=enrich)
+        text, image = render_plantuml(puml_text)
+        
+        tree = ast.parse(code_snippet)
+        visitor = CallGraphVisitor()
+        visitor.visit(tree)
+        
+        entry_points = [m for m in visitor.call_sequences.keys() if not m.startswith('_')]
+        entry_info = f"Available entry points: {', '.join(entry_points[:10])}"
+        
+        return text, image, gr.update(visible=True, value="✅ Sequence Diagram Complete!"), entry_info
+        
+    except Exception as e:
+        return f"❌ Error: {e}", None, gr.update(visible=True, value=f"❌ Error"), ""
+
+def process_folder_sequence(folder_path: str, entry_method: str = None, enrich: bool = False, provider: str = "sambanova", progress=gr.Progress()):
+    """TAB 2D: Project Sequence Diagram"""
+    path_obj = Path(folder_path)
+    
+    if not path_obj.exists() or not path_obj.is_dir():
+        return "❌ Invalid path.", None, gr.update(visible=True, value="❌ Invalid Path"), ""
+    
+    try:
+        progress(0.3, desc="Scanning Python files...")
+        
+        file_contents = {}
+        for file_path in path_obj.rglob("*.py"):
+            parts = file_path.parts
+            if any(p.startswith(".") or p in ["venv", "env", "__pycache__", ".git"] for p in parts):
+                continue
+            try:
+                file_contents[file_path.name] = file_path.read_text(encoding='utf-8', errors='replace')
+            except Exception:
+                continue
+        
+        if not file_contents:
+            return "⚠️ No Python files found.", None, gr.update(visible=True, value="⚠️ No Files"), ""
+        
+        progress(0.6, desc=f"Analyzing {len(file_contents)} files...")
+        
+        llm = None
+        if enrich:
+            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        
+        analyzer = ProjectSequenceAnalyzer(llm=llm)
+        analyzer.analyze_files(file_contents)
+        
+        if not entry_method:
+            candidates = [
+                (m, len(c)) 
+                for m, c in analyzer.global_visitor.call_sequences.items()
+                if c and not m.startswith('_')
+            ]
+            if candidates:
+                candidates.sort(key=lambda x: x[1], reverse=True)
+                entry_method = candidates[0][0]
+        
+        if not entry_method:
+            methods = list(analyzer.global_visitor.call_sequences.keys())[:10]
+            return f"⚠️ No entry method. Available: {methods}", None, gr.update(visible=True, value="⚠️ Specify Entry"), ""
+        
+        progress(0.8, desc="Generating sequence diagram...")
+        puml_text = analyzer.generate_diagram(entry_method, enrich=enrich)
+        text, image = render_plantuml(puml_text)
+        
+        entry_points = [m for m in analyzer.global_visitor.call_sequences.keys() if not m.startswith('_')]
+        entry_info = f"Top methods: {', '.join(entry_points[:15])}"
+        
+        progress(1.0, desc="Complete!")
+        return text, image, gr.update(visible=True, value=f"✅ Entry: {entry_method}"), entry_info
+        
+    except Exception as e:
+        return f"❌ Error: {e}", None, gr.update(visible=True, value=f"❌ Failed"), ""
+
+def process_folder_sequence_multi(folder_path: str, enrich: bool = False, provider: str = "sambanova", progress=gr.Progress()):
+    """TAB 6: Generate MULTIPLE sequence diagrams, one per module"""
+    path_obj = Path(folder_path)
+    
+    if not path_obj.exists() or not path_obj.is_dir():
+        return "❌ Invalid path.", [], [], None, "", gr.update(visible=True, value="❌ Invalid Path")
+    
+    try:
+        progress(0.2, desc="Scanning Python files...")
+        
+        file_contents = {}
+        file_count = 0
+        
+        for file_path in path_obj.rglob("*.py"):
+            parts = file_path.parts
+            if any(p.startswith(".") or p in ["venv", "env", "__pycache__", "node_modules"] for p in parts):
+                continue
+            try:
+                code = file_path.read_text(encoding='utf-8', errors='replace')
+                rel_path = file_path.relative_to(path_obj)
+                file_contents[str(rel_path)] = code
+                file_count += 1
+            except Exception:
+                continue
+        
+        if not file_contents:
+            return "⚠️ No Python files found.", [], [], None, "", gr.update(visible=True, value="⚠️ No Files")
+        
+        progress(0.5, desc=f"Analyzing {file_count} files by module...")
+        
+        llm = None
+        if enrich:
+            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        
+        service = SequenceDiagramService(llm=llm)
+        
+        if not hasattr(service, 'generate_modular'):
+            return "⚠️ Please update sequence_service.py with multi-module support", [], [], None, "", gr.update(visible=True, value="⚠️ Update Required")
+        
+        diagrams_dict = service.generate_modular(file_contents, enrich=enrich)
+        
+        if "error" in diagrams_dict:
+            return diagrams_dict["error"], [], [], None, "", gr.update(visible=True, value="❌ Failed")
+        
+        progress(0.8, desc="Rendering diagrams...")
+        
+        diagram_outputs = []
+        
+        for module_name, puml_text in diagrams_dict.items():
+            if "error" in module_name.lower():
+                continue
+            
+            text, image = render_plantuml(puml_text)
+            
+            if image:
+                diagram_outputs.append({
+                    "module": module_name,
+                    "image": image,
+                    "puml": puml_text
+                })
+        
+        if not diagram_outputs:
+            return "⚠️ No diagrams generated.", [], [], None, "", gr.update(visible=True, value="⚠️ No Diagrams")
+        
+        progress(1.0, desc="Complete!")
+        
+        summary = f"✅ Generated {len(diagram_outputs)} Sequence diagrams:\n\n"
+        summary += "\n".join([f"🎬 {d['module']}" for d in diagram_outputs])
+        
+        module_names = [d["module"] for d in diagram_outputs]
+        
+        first_img = diagram_outputs[0]["image"] if diagram_outputs else None
+        first_puml = diagram_outputs[0]["puml"] if diagram_outputs else ""
+        
+        return (
+            summary,
+            diagram_outputs,
+            gr.update(choices=module_names, value=module_names[0] if module_names else None),
+            first_img,
+            first_puml,
+            gr.update(visible=True, value=f"✅ {len(diagram_outputs)} Modules")
+        )
+        
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        logging.error(f"Multi-sequence error: {error_detail}")
+        return f"❌ Error: {e}\n\nDetails:\n{error_detail}", [], [], None, "", gr.update(visible=True, value=f"❌ Failed")
+
+# --- TAB 5: AI PROPOSAL ---
 def process_proposal_zip(zip_path, progress=gr.Progress()):
     """AI-powered architecture refactoring proposal"""
     if not zip_path:
@@ -273,7 +607,7 @@ def process_proposal_zip(zip_path, progress=gr.Progress()):
     finally:
         safe_cleanup(temp_dir)
 
-# --- TAB 4: MODAL REFACTORING ---
+# --- TAB 6: MODAL REFACTORING ---
 def run_modal_refactoring_zip(zip_path, file_path, instruction, test_path=None, progress=gr.Progress()):
     """Execute refactoring in Modal cloud sandbox"""
     # Validation
@@ -457,7 +791,7 @@ with gr.Blocks(
     with gr.Tabs():
         
         # TAB 1: Single File
-        with gr.Tab("📄 Single File Analysis"):
+        with gr.Tab("📄 Single File Analysis" , id = 0):
             gr.Markdown("### Quick Code Analysis\nPaste Python code to generate instant UML diagram.")
             
             with gr.Row():
@@ -483,7 +817,7 @@ with gr.Blocks(
             )
         
         # TAB 2: Project Map
-        with gr.Tab("📂 Project Map"):
+        with gr.Tab("📂 Project Map" , id = 1):
             gr.Markdown("### Full Project Analysis\nUpload ZIP to visualize all classes and relationships.")
             gr.HTML('<div class="info-card"><strong>💡 Tip:</strong> Works best with 5-50 Python files.</div>')
             
@@ -504,8 +838,94 @@ with gr.Blocks(
                 outputs=[text_output_2, img_output_2, status_banner_2]
             )
         
-        # TAB 3: AI Proposal
-        with gr.Tab("✨ AI Proposal"):
+        # TAB 3: MULTI-MODULE USE CASES
+        
+        with gr.Tab("📊 Multi-Module Use Cases", id=2):
+            gr.Markdown("### Multiple Use Case Diagrams by Module\nGenerates **separate diagrams for each module** - much clearer than one massive diagram!")
+            
+            gr.HTML('<div class="info-card"><strong>🎯 Smart Organization:</strong> Each service/module gets its own diagram. Perfect for large projects with multiple components.</div>')
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    multi_folder_input = gr.Textbox(label="Project Path", info="Path to your Python project", lines=1)
+                    
+                    with gr.Row():
+                        multi_provider = gr.Dropdown(choices=["sambanova", "nebius", "openai"], value="sambanova", label="LLM Provider")
+                        multi_enrich = gr.Checkbox(label="✨ AI Enrichment", value=True, info="Better actor detection")
+                    
+                    multi_scan_btn = gr.Button("🔍 Generate Module Diagrams", variant="primary", size="lg", elem_classes=["primary-button"])
+                
+                with gr.Column(scale=1):
+                    multi_status_banner = gr.Markdown(visible=False, elem_classes=["banner"])
+                    multi_summary = gr.Textbox(label="Generated Diagrams", lines=5, interactive=False)
+            
+            gr.Markdown("### 📊 Diagrams by Module")
+            
+            multi_gallery = gr.State([])
+            multi_module_selector = gr.Dropdown(label="Select Module to View", choices=[], interactive=True)
+            
+            with gr.Group():
+                multi_diagram_img = gr.Image(label="Module Use Case Diagram", type="pil", elem_classes=["diagram-container"], show_download_button=True)
+            
+            with gr.Accordion("📝 PlantUML Source", open=False):
+                multi_diagram_puml = gr.Code(language="markdown", label="PlantUML Code", lines=10)
+            
+            def update_diagram_viewer(diagrams_data, selected_module):
+                if not diagrams_data or not selected_module:
+                    return None, ""
+                for d in diagrams_data:
+                    if d["module"] == selected_module:
+                        return d["image"], d["puml"]
+                return None, ""
+            
+            multi_scan_btn.click(fn=process_folder_usecase_multi, inputs=[multi_folder_input, multi_enrich, multi_provider], outputs=[multi_summary, multi_gallery, multi_module_selector, multi_diagram_img, multi_diagram_puml, multi_status_banner])
+            multi_module_selector.change(fn=update_diagram_viewer, inputs=[multi_gallery, multi_module_selector], outputs=[multi_diagram_img, multi_diagram_puml])
+        
+        # TAB 4: MULTI-MODULE SEQUENCES
+        with gr.Tab("🎬 Multi-Module Sequences", id=3):
+            gr.Markdown("### Multiple Sequence Diagrams by Module\nGenerates **separate sequence diagrams for each module** - much clearer than one massive diagram!")
+            
+            gr.HTML('<div class="info-card"><strong>🎯 Smart Organization:</strong> Each service/module gets its own sequence flow. Perfect for understanding complex interactions across multiple components.</div>')
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    seq_multi_folder_input = gr.Textbox(label="Project Path", info="Path to your Python project", lines=1)
+                    
+                    with gr.Row():
+                        seq_multi_provider = gr.Dropdown(choices=["sambanova", "nebius", "openai"], value="sambanova", label="LLM Provider")
+                        seq_multi_enrich = gr.Checkbox(label="✨ AI Enrichment", value=False, info="Slow but better names")
+                    
+                    seq_multi_scan_btn = gr.Button("🔍 Generate Module Sequences", variant="primary", size="lg", elem_classes=["primary-button"])
+                
+                with gr.Column(scale=1):
+                    seq_multi_status_banner = gr.Markdown(visible=False, elem_classes=["banner"])
+                    seq_multi_summary = gr.Textbox(label="Generated Diagrams", lines=5, interactive=False)
+            
+            gr.Markdown("### 🎬 Sequence Diagrams by Module")
+            
+            seq_multi_gallery = gr.State([])
+            seq_multi_module_selector = gr.Dropdown(label="Select Module to View", choices=[], interactive=True)
+            
+            with gr.Group():
+                seq_multi_diagram_img = gr.Image(label="Module Sequence Diagram", type="pil", elem_classes=["diagram-container"], show_download_button=True)
+            
+            with gr.Accordion("📝 PlantUML Source", open=False):
+                seq_multi_diagram_puml = gr.Code(language="markdown", label="PlantUML Code", lines=10)
+            
+            def update_seq_diagram_viewer(diagrams_data, selected_module):
+                if not diagrams_data or not selected_module:
+                    return None, ""
+                for d in diagrams_data:
+                    if d["module"] == selected_module:
+                        return d["image"], d["puml"]
+                return None, ""
+            
+            seq_multi_scan_btn.click(fn=process_folder_sequence_multi, inputs=[seq_multi_folder_input, seq_multi_enrich, seq_multi_provider], outputs=[seq_multi_summary, seq_multi_gallery, seq_multi_module_selector, seq_multi_diagram_img, seq_multi_diagram_puml, seq_multi_status_banner])
+            seq_multi_module_selector.change(fn=update_seq_diagram_viewer, inputs=[seq_multi_gallery, seq_multi_module_selector], outputs=[seq_multi_diagram_img, seq_multi_diagram_puml])
+    
+
+        # TAB 5: AI PROPOSAL
+        with gr.Tab("✨ AI Proposal" , id = 4):
             gr.Markdown("### Architecture Recommendations\nAI detects anti-patterns and suggests improvements.")
             gr.HTML('<div class="info-card"><strong>🧠 AI-Powered:</strong> Suggests Strategy, Factory, Singleton patterns, etc.</div>')
             
@@ -527,8 +947,8 @@ with gr.Blocks(
                 outputs=[proposal_output, text_output_3, img_output_3, status_banner_3]
             )
         
-        # TAB 4: Modal Refactoring
-        with gr.Tab("☁️ Safe Refactoring"):
+        # TAB 6: Modal Refactoring
+        with gr.Tab("☁️ Safe Refactoring", id=5):
             gr.Markdown("### Production-Safe Cloud Execution\nRefactor code in isolated Modal sandboxes with testing.")
             gr.HTML('<div class="info-card"><strong>🛡️ Safety:</strong> Tests run in cloud. Files updated only if tests pass.</div>')
             

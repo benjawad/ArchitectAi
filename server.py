@@ -12,6 +12,9 @@ from services.refactoring_service import RefactoringAdvisor
 import os 
 from dotenv import load_dotenv
 
+from services.sequence_service import ProjectSequenceAnalyzer, SequenceDiagramService
+from services.usecase_service import UseCaseDiagramService
+
 load_dotenv()
 
 # --- 🛡️ PROTOCOL PROTECTION & LOGGING SETUP 🛡️ ---
@@ -520,6 +523,334 @@ Refactored code preview:
     except Exception as e:
         logging.error(f"❌ Refactoring error: {e}")
         return f"❌ Error: {e}"
+
+@mcp.tool()
+def generate_usecase_diagram(code: str, enrich: bool = True, provider: str = "sambanova") -> str:
+    """
+    Analyzes Python code and generates a PlantUML Use Case Diagram.
+    
+    Detects:
+    - Service classes (patterns: *Service, *Controller, *Handler, *API)
+    - FastAPI/Flask endpoints (@app.get, @router.post, etc.)
+    - Public methods as potential use cases
+    
+    Args:
+        code: Python source code to analyze
+        enrich: If True, uses AI to infer actors and relationships
+        provider: LLM provider ("sambanova", "nebius", "openai")
+    
+    Returns:
+        PlantUML use case diagram string
+    """
+    try:
+        # Get LLM client (using singleton)
+        llm = None
+        if enrich:
+            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        
+        # Generate diagram
+        service = UseCaseDiagramService(llm=llm)
+        result = service.generate(code, enrich=enrich)
+        
+        logging.info("✓ Use case diagram generated successfully")
+        return result
+        
+    except Exception as e:
+        logging.error(f"❌ Use case diagram failed: {e}")
+        traceback.print_exc(file=sys.stderr)
+        return f"' ❌ Error: {str(e)}"
+
+@mcp.tool()
+def generate_full_project_usecase_diagram(path: str = ".", enrich: bool = True, provider: str = "sambanova") -> str:
+    """
+    Analyzes the ENTIRE project directory and generates a Use Case Diagram.
+    
+    Scans all .py files for services, controllers, and endpoints.
+    
+    Args:
+        path: Root directory to analyze
+        enrich: If True, uses AI to infer actors
+        provider: LLM provider
+    
+    Returns:
+        PlantUML use case diagram string
+    """
+    try:
+        # Security check
+        is_valid, resolved_path, error_msg = _validate_path(path, operation="list")
+        if not is_valid:
+            return error_msg
+        
+        # Collect all Python files
+        combined_code = []
+        file_count = 0
+        
+        for file_path in resolved_path.rglob("*.py"):
+            parts = file_path.parts
+            if any(p.startswith(".") or p in ["venv", "env", "__pycache__", "node_modules"] for p in parts):
+                continue
+            try:
+                code = file_path.read_text(encoding='utf-8', errors='replace')
+                combined_code.append(f"# === File: {file_path.name} ===\n{code}")
+                file_count += 1
+            except Exception:
+                continue
+        
+        if not combined_code:
+            return "' ⚠️ No Python files found in directory"
+        
+        # Get LLM client
+        llm = None
+        if enrich:
+            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        
+        # Generate diagram from combined code
+        service = UseCaseDiagramService(llm=llm)
+        # Limit code size to avoid token limits
+        full_code = "\n\n".join(combined_code)[:50000]
+        result = service.generate(full_code, enrich=enrich)
+        
+        logging.info(f"✓ Project use case diagram generated ({file_count} files)")
+        return result
+        
+    except Exception as e:
+        logging.error(f"❌ Project use case diagram failed: {e}")
+        return f"' ❌ Error: {str(e)}"
+
+@mcp.tool()
+def generate_sequence_diagram(
+    code: str, 
+    entry_method: str = None,
+    enrich: bool = True, 
+    provider: str = "sambanova"
+) -> str:
+    """
+    Analyzes Python code and generates a PlantUML Sequence Diagram.
+    
+    Traces method calls through:
+    - self.dependency.method() patterns
+    - Control flow (if/else, loops, try/except)
+    - Async operations
+    
+    Args:
+        code: Python source code to analyze
+        entry_method: Starting point (e.g., "OrderService.create_order")
+                     If None, auto-detects the method with most calls
+        enrich: If True, uses AI to improve readability
+        provider: LLM provider ("sambanova", "nebius", "openai")
+    
+    Returns:
+        PlantUML sequence diagram string
+    """
+    try:
+        # Get LLM client
+        llm = None
+        if enrich:
+            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        
+        # Generate diagram
+        service = SequenceDiagramService(llm=llm)
+        result = service.generate(code, entry_method=entry_method, enrich=enrich)
+        
+        logging.info(f"✓ Sequence diagram generated (entry: {entry_method or 'auto'})")
+        return result
+        
+    except Exception as e:
+        logging.error(f"❌ Sequence diagram failed: {e}")
+        traceback.print_exc(file=sys.stderr)
+        return f"' ❌ Error: {str(e)}"
+
+
+@mcp.tool()
+def generate_full_project_sequence_diagram(
+    path: str = ".",
+    entry_method: str = None,
+    enrich: bool = False,
+    provider: str = "sambanova"
+) -> str:
+    """
+    Analyzes ENTIRE project and generates a cross-file Sequence Diagram.
+    
+    Scans all .py files and traces method calls across modules.
+    
+    Args:
+        path: Root directory to analyze
+        entry_method: Starting point (e.g., "OrderService.create_order")
+        enrich: If True, uses AI to improve readability
+        provider: LLM provider
+    
+    Returns:
+        PlantUML sequence diagram string
+    """
+    try:
+        # Security check
+        is_valid, resolved_path, error_msg = _validate_path(path, operation="list")
+        if not is_valid:
+            return error_msg
+        
+        # Collect all Python files
+        file_contents = {}
+        for file_path in resolved_path.rglob("*.py"):
+            parts = file_path.parts
+            if any(p.startswith(".") or p in ["venv", "env", "__pycache__", ".git"] for p in parts):
+                continue
+            try:
+                file_contents[file_path.name] = file_path.read_text(encoding='utf-8', errors='replace')
+            except Exception:
+                continue
+        
+        if not file_contents:
+            return "' ⚠️ No Python files found in directory"
+        
+        # Get LLM client
+        llm = None
+        if enrich:
+            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        
+        # Analyze project
+        analyzer = ProjectSequenceAnalyzer(llm=llm)
+        analyzer.analyze_files(file_contents)
+        
+        # Auto-detect entry if not provided
+        if not entry_method:
+            candidates = [
+                (m, len(c)) 
+                for m, c in analyzer.global_visitor.call_sequences.items()
+                if c and not m.startswith('_')
+            ]
+            if candidates:
+                candidates.sort(key=lambda x: x[1], reverse=True)
+                entry_method = candidates[0][0]
+        
+        if not entry_method:
+            # List available methods
+            methods = list(analyzer.global_visitor.call_sequences.keys())[:10]
+            return f"' ⚠️ No entry method specified. Available: {methods}"
+        
+        result = analyzer.generate_diagram(entry_method, enrich=enrich)
+        
+        logging.info(f"✓ Project sequence diagram generated ({len(file_contents)} files)")
+        return result
+        
+    except Exception as e:
+        logging.error(f"❌ Project sequence diagram failed: {e}")
+        return f"' ❌ Error: {str(e)}"
+
+@mcp.tool()
+def list_sequence_entry_points(code: str) -> str:
+    """
+    Lists all available methods that can be used as sequence diagram entry points.
+    
+    Use this to discover what methods exist before generating a sequence diagram.
+    
+    Args:
+        code: Python source code to analyze
+    
+    Returns:
+        JSON list of available entry methods with their call counts
+    """
+    try:
+        from services.sequence_service import CallGraphVisitor
+        
+        tree = ast.parse(code)
+        visitor = CallGraphVisitor()
+        visitor.visit(tree)
+        
+        # Build list with call counts
+        entry_points = []
+        for method, calls in visitor.call_sequences.items():
+            if method.startswith('_'):
+                continue
+            entry_points.append({
+                'method': method,
+                'calls_count': len(calls),
+                'calls_to': list(set(
+                    c['target_type'] for c in calls if c.get('target_type')
+                ))[:5]
+            })
+        
+        # Sort by call count (most interesting methods first)
+        entry_points.sort(key=lambda x: x['calls_count'], reverse=True)
+        
+        logging.info(f"✓ Found {len(entry_points)} potential entry points")
+        return json.dumps({
+            'total_methods': len(entry_points),
+            'entry_points': entry_points[:20]
+        }, indent=2)
+        
+    except SyntaxError as se:
+        return json.dumps({'error': f'Syntax error: {se}'})
+    except Exception as e:
+        return json.dumps({'error': str(e)})
+
+
+@mcp.tool()
+def list_project_entry_points(path: str = ".") -> str:
+    """
+    Lists all available methods across the ENTIRE project for sequence diagrams.
+    
+    Args:
+        path: Root directory to analyze
+    
+    Returns:
+        JSON list of available entry methods with their call counts
+    """
+    try:
+        from services.sequence_service import CallGraphVisitor
+        
+        # Security check
+        is_valid, resolved_path, error_msg = _validate_path(path, operation="list")
+        if not is_valid:
+            return json.dumps({'error': error_msg})
+        
+        # Analyze all files
+        global_visitor = CallGraphVisitor()
+        file_count = 0
+        
+        for file_path in resolved_path.rglob("*.py"):
+            parts = file_path.parts
+            if any(p.startswith(".") or p in ["venv", "env", "__pycache__"] for p in parts):
+                continue
+            try:
+                code = file_path.read_text(encoding='utf-8', errors='replace')
+                tree = ast.parse(code)
+                file_visitor = CallGraphVisitor()
+                file_visitor.visit(tree)
+                
+                # Merge
+                global_visitor.classes.update(file_visitor.classes)
+                for method, calls in file_visitor.call_sequences.items():
+                    global_visitor.call_sequences[method].extend(calls)
+                file_count += 1
+            except Exception:
+                continue
+        
+        # Build entry points list
+        entry_points = []
+        for method, calls in global_visitor.call_sequences.items():
+            if method.startswith('_') or '.visit_' in method:
+                continue
+            entry_points.append({
+                'method': method,
+                'calls_count': len(calls),
+                'calls_to': list(set(
+                    c['target_type'] for c in calls if c.get('target_type')
+                ))[:5]
+            })
+        
+        entry_points.sort(key=lambda x: x['calls_count'], reverse=True)
+        
+        logging.info(f"✓ Scanned {file_count} files, found {len(entry_points)} entry points")
+        return json.dumps({
+            'files_analyzed': file_count,
+            'total_methods': len(entry_points),
+            'entry_points': entry_points[:30]
+        }, indent=2)
+        
+    except Exception as e:
+        return json.dumps({'error': str(e)})
+
+
 # --- ENTRY POINT ---
 
 if __name__ == "__main__":
@@ -527,7 +858,12 @@ if __name__ == "__main__":
     logging.info(f"📍 Sandbox Root: {SANDBOX_ROOT}")
     logging.info(f"🚫 Protected Paths: {len(BLOCKED_PATHS)}")
     logging.info("🔧 LLM Client: Singleton Pattern (created once, reused)")
-    logging.info("Available providers: sambanova, nebius")
+    logging.info("📊 Available Diagram Types:")
+    logging.info("   • Class Diagrams      → generate_architecture_diagram()")
+    logging.info("   • Use Case Diagrams   → generate_usecase_diagram()")
+    logging.info("   • Sequence Diagrams   → generate_sequence_diagram()")
+    logging.info("Available providers: sambanova, nebius, openai")
+
     
     try:
         mcp.run()
