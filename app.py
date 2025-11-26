@@ -65,6 +65,39 @@ class LLMClientSingleton:
 
 _llm_singleton = LLMClientSingleton()
 
+def extract_file_list(zip_path):
+    """Extract list of .py files from uploaded ZIP"""
+    if not zip_path:
+        return gr.update(choices=[]), gr.update(choices=[])
+    
+    try:
+        py_files = []
+        test_files = []
+        
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            for file_info in zip_ref.filelist:
+                if file_info.filename.endswith('.py') and not file_info.is_dir():
+                    py_files.append(file_info.filename)
+                    
+                    # Separate test files
+                    if 'test' in file_info.filename.lower():
+                        test_files.append(file_info.filename)
+        
+        # Sort for better UX
+        py_files.sort()
+        test_files.sort()
+        
+        return (
+            gr.update(choices=py_files, value=py_files[0] if py_files else None),
+            gr.update(choices=test_files, value=None)
+        )
+        
+    except Exception as e:
+        return (
+            gr.update(choices=[], value=None),
+            gr.update(choices=[], value=None)
+        )
+    
 def process_proposal_zip(zip_path, progress=gr.Progress()):
     """TAB 3: AI Proposal from ZIP"""
     if not zip_path:
@@ -668,7 +701,7 @@ with gr.Blocks(
         with gr.Tab("☁️ Safe Refactoring (Modal)", id=3):
             gr.Markdown("""
                 ### Production-Safe Cloud Execution
-                Upload your project, specify which file to refactor, and let Modal handle it safely.
+                Upload your project, select which file to refactor, and let Modal handle it safely.
             """)
             
             gr.HTML("""
@@ -688,18 +721,18 @@ with gr.Blocks(
                         type="filepath"
                     )
                     
-                    file_input = gr.Textbox(
-                        label="Target File (Relative Path)",
-                        placeholder="services/payment_processor.py",
-                        info="File to refactor, relative to ZIP root",
-                        lines=1
+                    file_dropdown = gr.Dropdown(
+                        label="Target File",
+                        choices=[],
+                        info="Select .py file to refactor",
+                        interactive=True
                     )
                     
-                    test_input = gr.Textbox(
+                    test_dropdown = gr.Dropdown(
                         label="Test File (Optional)",
-                        placeholder="tests/test_payment_processor.py",
-                        info="Tests to run for validation",
-                        lines=1
+                        choices=[],
+                        info="Select test file for validation",
+                        interactive=True
                     )
                     
                     instruction_input = gr.Textbox(
@@ -730,7 +763,7 @@ with gr.Blocks(
                             <strong>How it works:</strong>
                             <ol style="margin: 0.5rem 0;">
                                 <li>Upload your project as ZIP</li>
-                                <li>Specify file to refactor</li>
+                                <li>Select file from dropdown</li>
                                 <li>Modal extracts & executes in cloud</li>
                                 <li>Tests run automatically</li>
                                 <li>Download refactored ZIP</li>
@@ -743,9 +776,16 @@ with gr.Blocks(
                         visible=False
                     )
             
+            # When ZIP uploaded, populate dropdowns
+            modal_zip.change(
+                fn=extract_file_list,
+                inputs=modal_zip,
+                outputs=[file_dropdown, test_dropdown]
+            )
+            
             execute_btn.click(
                 fn=run_modal_refactoring_zip,
-                inputs=[modal_zip, file_input, instruction_input, test_input],
+                inputs=[modal_zip, file_dropdown, instruction_input, test_dropdown],
                 outputs=[modal_output, download_output]
             )
     # FOOTER
