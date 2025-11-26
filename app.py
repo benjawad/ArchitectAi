@@ -525,11 +525,11 @@ with gr.Tab("📂 Project Architecture Map", id=1):
                     lines=10
                 )
     
-        scan_btn.click(
-            fn=process_zip_upload,
-            inputs=project_zip,
-            outputs=[text_output_2, img_output_2, status_banner_2]
-        )
+            scan_btn.click(
+                fn=process_zip_upload,
+                inputs=project_zip,
+                outputs=[text_output_2, img_output_2, status_banner_2]
+            )
         # === TAB 3: AI PROPOSAL ===
         with gr.Tab("✨ AI Refactoring Proposal", id=2):
             gr.Markdown("""
