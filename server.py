@@ -9,8 +9,16 @@ import json
 from services.code_generation_service import CodeGenerator
 from services.project_service import ProjectAnalyzer
 from services.refactoring_service import RefactoringAdvisor 
+import os 
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # --- 🛡️ PROTOCOL PROTECTION & LOGGING SETUP 🛡️ ---
+
+os.environ.setdefault("MODAL_TOKEN_ID", os.getenv("MODAL_TOKEN_ID", ""))
+os.environ.setdefault("MODAL_TOKEN_SECRET", os.getenv("MODAL_TOKEN_SECRET", ""))
+
 logging.basicConfig(
     level=logging.INFO,
     stream=sys.stderr,
