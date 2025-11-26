@@ -64,7 +64,47 @@ class LLMClientSingleton:
 
 _llm_singleton = LLMClientSingleton()
 
-
+def process_proposal_zip(zip_path, progress=gr.Progress()):
+    """TAB 3: AI Proposal from ZIP"""
+    if not zip_path:
+        return "⚠️ Please upload a ZIP file.", None, None, gr.update(visible=True, value="⚠️ No File")
+    
+    try:
+        temp_dir = tempfile.mkdtemp()
+        
+        progress(0.2, desc="Extracting ZIP...")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+        
+        progress(0.5, desc="AI analyzing architecture...")
+        analyzer = ProjectAnalyzer(Path(temp_dir))
+        structure = analyzer.analyze()
+        
+        if not structure:
+            shutil.rmtree(temp_dir)
+            return "⚠️ No code found.", None, None, gr.update(visible=True, value="⚠️ No Code")
+        
+        advisor = RefactoringAdvisor()
+        proposal = advisor.propose_improvement(structure)
+        
+        if "error" in proposal:
+            shutil.rmtree(temp_dir)
+            return f"❌ AI Error: {proposal['error']}", None, None, gr.update(visible=True, value="❌ AI Failed")
+        
+        progress(0.8, desc="Generating proposed UML...")
+        puml_code = proposal.get("proposed_uml", "")
+        _, image = render_plantuml(puml_code)
+        
+        shutil.rmtree(temp_dir)
+        progress(1.0, desc="Complete!")
+        
+        return json.dumps(proposal, indent=2), puml_code, image, gr.update(visible=True, value="✅ Proposal Generated")
+        
+    except Exception as e:
+        if 'temp_dir' in locals():
+            shutil.rmtree(temp_dir)
+        return f"❌ Error: {e}", None, None, gr.update(visible=True, value="❌ Failed")
+    
 def process_zip_upload(zip_path, progress=gr.Progress()):
     """TAB 2: Extract ZIP and analyze project"""
     if not zip_path:
@@ -536,6 +576,65 @@ with gr.Blocks(
             propose_btn.click(
                 fn=process_proposal,
                 inputs=proposal_input,
+                outputs=[proposal_output, text_output_3, img_output_3, status_banner_3]
+            )
+        # === TAB 3: AI PROPOSAL ===
+        with gr.Tab("✨ AI Refactoring Proposal", id=2):
+            gr.Markdown("""
+                ### Intelligent Architecture Recommendations
+                Let AI analyze your codebase and suggest design pattern improvements.
+            """)
+            
+            gr.HTML("""
+                <div class="info-card">
+                    <strong>🧠 AI-Powered:</strong> Detects anti-patterns like God Objects, 
+                    suggests appropriate design patterns (Strategy, Factory, Singleton, etc.), 
+                    and generates before/after UML diagrams.
+                </div>
+            """)
+            
+            with gr.Row():
+                with gr.Column(scale=1):
+                    proposal_zip = gr.File(
+                        label="📦 Upload Project (ZIP)",
+                        file_types=[".zip"],
+                        type="filepath"
+                    )
+                    
+                    propose_btn = gr.Button(
+                        "🧠 Generate Proposal",
+                        variant="primary",
+                        size="lg",
+                        elem_classes=["primary-button"]
+                    )
+                    
+                    status_banner_3 = gr.Markdown(visible=False, elem_classes=["banner"])
+                    
+                    with gr.Group():
+                        proposal_output = gr.Code(
+                            language="json",
+                            label="📋 AI Analysis & Recommendations",
+                            lines=15,
+                        )
+                
+                with gr.Column(scale=1):
+                    with gr.Group():
+                        img_output_3 = gr.Image(
+                            label="🎨 Proposed Architecture (After Refactoring)",
+                            type="pil",
+                            elem_classes=["diagram-container"],
+                        )
+                    
+                    with gr.Accordion("📝 Proposed PlantUML", open=False):
+                        text_output_3 = gr.Code(
+                            language="markdown",
+                            label="PlantUML Code",
+                            lines=10
+                        )
+            
+            propose_btn.click(
+                fn=process_proposal_zip,
+                inputs=proposal_zip,
                 outputs=[proposal_output, text_output_3, img_output_3, status_banner_3]
             )
         
