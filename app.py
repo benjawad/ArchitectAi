@@ -296,45 +296,73 @@ def run_modal_refactoring_zip(zip_path, file_path, instruction, test_path=None, 
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(temp_extract)
         
-        progress(0.4, desc="📄 Reading target file...")
-        target_file = Path(temp_extract) / file_path
+        progress(0.4, desc="📄 Locating file...")
         
-        if not target_file.exists():
-            return f"❌ File not found: {file_path}", gr.update(visible=False)
+        # FIX: Search for file in extracted directory
+        target_file = None
+        for root, dirs, files in os.walk(temp_extract):
+            if file_path in root or file_path.endswith(os.path.basename(root)):
+                continue
+            potential_path = Path(root) / os.path.basename(file_path)
+            if potential_path.exists():
+                target_file = potential_path
+                break
         
-        # Read files
+        # If not found, try direct path
+        if not target_file:
+            target_file = Path(temp_extract) / file_path
+        
+        if not target_file or not target_file.exists():
+            # List what we actually have for debugging
+            all_py_files = []
+            for root, dirs, files in os.walk(temp_extract):
+                for f in files:
+                    if f.endswith('.py'):
+                        rel_path = Path(root).relative_to(temp_extract) / f
+                        all_py_files.append(str(rel_path))
+            
+            return f"❌ File not found: {file_path}\n\nAvailable files:\n" + "\n".join(all_py_files[:10]), gr.update(visible=False)
+        
+        progress(0.5, desc="📖 Reading file...")
         original_code = target_file.read_text(encoding='utf-8')
-        test_code = None
         
+        # Read test file
+        test_code = None
         if test_path:
-            test_file = Path(temp_extract) / test_path
-            if test_file.exists():
+            test_file = None
+            for root, dirs, files in os.walk(temp_extract):
+                potential_path = Path(root) / os.path.basename(test_path)
+                if potential_path.exists():
+                    test_file = potential_path
+                    break
+            
+            if test_file and test_file.exists():
                 test_code = test_file.read_text(encoding='utf-8')
         
-        progress(0.6, desc="☁️ Executing in Modal sandbox...")
+        progress(0.7, desc="☁️ Sending to Modal...")
         
-        # Import and call Modal function
+        # Call Modal
         try:
             from server import apply_refactoring_safely
-            result = apply_refactoring_safely(file_path, instruction, test_path)
+            
+            # Use just the filename for Modal
+            file_name = os.path.basename(file_path)
+            result = apply_refactoring_safely(file_name, instruction, test_path)
+            
             progress(1.0, desc="✅ Complete!")
             return result, gr.update(visible=False)
             
-        except ImportError as ie:
-            logger.error(f"Modal import error: {ie}")
-            return "⚠️ Modal not configured. Add MODAL_TOKEN_ID and MODAL_TOKEN_SECRET to Space secrets.", gr.update(visible=False)
+        except ImportError:
+            return "⚠️ Modal not configured.", gr.update(visible=False)
         except Exception as modal_error:
-            logger.error(f"Modal execution error: {modal_error}")
-            return f"❌ Modal execution failed: {str(modal_error)}", gr.update(visible=False)
+            logger.error(f"Modal error: {modal_error}")
+            return f"❌ Modal failed: {str(modal_error)}", gr.update(visible=False)
             
-    except zipfile.BadZipFile:
-        return "❌ Invalid ZIP file.", gr.update(visible=False)
     except Exception as e:
         logger.error(f"Refactoring error: {e}")
         return f"❌ Error: {str(e)}", gr.update(visible=False)
     finally:
         safe_cleanup(temp_extract)
-
 # --- CUSTOM CSS ---
 custom_css = """
 .gradio-container {
