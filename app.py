@@ -407,12 +407,6 @@ custom_css = """
 # --- GRADIO INTERFACE ---
 with gr.Blocks(
     title="ArchitectAI - Autonomous Cloud Refactoring",
-    theme=gr.themes.Soft(
-        primary_hue="purple",
-        secondary_hue="blue",
-        neutral_hue="slate",
-    ),
-    css=custom_css,
     fill_height=True
 ) as demo:
     
@@ -555,5 +549,12 @@ if __name__ == "__main__":
     demo.launch(
         server_name="0.0.0.0",
         server_port=7860,
-        share=False
+        share=False,
+        theme=gr.themes.Soft(
+        primary_hue="purple",
+        secondary_hue="blue",
+        neutral_hue="slate",
+    ),
+    css=custom_css,
+
     )
