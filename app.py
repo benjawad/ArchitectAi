@@ -7,7 +7,9 @@ import sys
 from pathlib import Path
 from PIL import Image
 from plantuml import PlantUML
-
+import zipfile
+import tempfile
+import shutil
 # --- SETUP PATHS ---
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -61,6 +63,50 @@ class LLMClientSingleton:
         return None
 
 _llm_singleton = LLMClientSingleton()
+
+
+def process_zip_upload(zip_path, progress=gr.Progress()):
+    """TAB 2: Extract ZIP and analyze project"""
+    if not zip_path:
+        return "⚠️ Please upload a ZIP file.", None, gr.update(visible=True, value="⚠️ No File")
+    
+    try:
+        # Create temp directory
+        temp_dir = tempfile.mkdtemp()
+        
+        progress(0.2, desc="Extracting ZIP file...")
+        
+        # Extract ZIP
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+        
+        progress(0.5, desc="Analyzing project structure...")
+        
+        # Analyze
+        analyzer = ProjectAnalyzer(Path(temp_dir))
+        full_structure = analyzer.analyze()
+        
+        if not full_structure:
+            shutil.rmtree(temp_dir)
+            return "⚠️ No Python code found in ZIP.", None, gr.update(visible=True, value="⚠️ No Code")
+        
+        progress(0.8, desc="Generating diagram...")
+        
+        converter = DeterministicPlantUMLConverter()
+        puml_text = converter.convert(full_structure)
+        text, image = render_plantuml(puml_text)
+        
+        # Cleanup
+        shutil.rmtree(temp_dir)
+        
+        progress(1.0, desc="Complete!")
+        
+        return text, image, gr.update(visible=True, value=f"✅ Found {len(full_structure)} components")
+        
+    except Exception as e:
+        if 'temp_dir' in locals():
+            shutil.rmtree(temp_dir)
+        return f"❌ Error: {e}", None, gr.update(visible=True, value="❌ Failed")
 
 # --- HELPER FUNCTIONS ---
 def render_plantuml(puml_text: str):
@@ -434,7 +480,56 @@ with gr.Blocks(
                 inputs=folder_input,
                 outputs=[text_output_2, img_output_2, status_banner_2]
             )
+        # === TAB 2: PROJECT MAP ===
+with gr.Tab("📂 Project Architecture Map", id=1):
+    gr.Markdown("""
+        ### Full Project Analysis
+        Upload a ZIP file of your Python project to visualize all classes and relationships.
+    """)
+    
+    gr.HTML("""
+        <div class="info-card">
+            <strong>💡 Tip:</strong> Create a ZIP of your project folder. Works best with 5-50 Python files.
+        </div>
+    """)
+    
+    with gr.Row():
+        with gr.Column(scale=1):
+            project_zip = gr.File(
+                label="📦 Upload Project (ZIP)",
+                file_types=[".zip"],
+                type="filepath"
+            )
+            
+            scan_btn = gr.Button(
+                "🔍 Scan Project",
+                variant="primary",
+                size="lg",
+                elem_classes=["primary-button"]
+            )
         
+        with gr.Column(scale=1):
+            status_banner_2 = gr.Markdown(visible=False, elem_classes=["banner"])
+            
+            with gr.Group():
+                img_output_2 = gr.Image(
+                    label="🗺️ Project Architecture",
+                    type="pil",
+                    elem_classes=["diagram-container"],
+                )
+            
+            with gr.Accordion("📝 PlantUML Source", open=False):
+                text_output_2 = gr.Code(
+                    language="markdown",
+                    label="PlantUML Code",
+                    lines=10
+                )
+    
+        scan_btn.click(
+            fn=process_zip_upload,
+            inputs=project_zip,
+            outputs=[text_output_2, img_output_2, status_banner_2]
+        )
         # === TAB 3: AI PROPOSAL ===
         with gr.Tab("✨ AI Refactoring Proposal", id=2):
             gr.Markdown("""

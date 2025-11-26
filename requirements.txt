@@ -14,3 +14,4 @@ Pillow
 modal
 radon
 gitpython
+zipfile38
