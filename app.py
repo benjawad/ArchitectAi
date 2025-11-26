@@ -2,6 +2,7 @@ import gradio as gr
 import ast
 import logging
 import io
+import os 
 import json
 import sys
 from pathlib import Path
@@ -148,6 +149,89 @@ def process_zip_upload(zip_path, progress=gr.Progress()):
             shutil.rmtree(temp_dir)
         return f"❌ Error: {e}", None, gr.update(visible=True, value="❌ Failed")
 
+
+def run_modal_refactoring_zip(zip_path, file_path, instruction, test_path=None, progress=gr.Progress()):
+    """TAB 4: Modal execution with ZIP upload"""
+    if not zip_path:
+        return "⚠️ Please upload a ZIP file.", gr.update(visible=False)
+    if not file_path or not instruction:
+        return "⚠️ Please provide file path and instruction.", gr.update(visible=False)
+    
+    try:
+        # Create temp directories
+        temp_extract = tempfile.mkdtemp()
+        temp_output = tempfile.mkdtemp()
+        
+        progress(0.1, desc="Extracting project...")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_extract)
+        
+        progress(0.3, desc="Preparing for Modal...")
+        
+        # Read target file
+        target_file = Path(temp_extract) / file_path
+        if not target_file.exists():
+            shutil.rmtree(temp_extract)
+            shutil.rmtree(temp_output)
+            return f"❌ File not found: {file_path}", gr.update(visible=False)
+        
+        original_code = target_file.read_text(encoding='utf-8')
+        
+        # Read test file if provided
+        test_code = None
+        if test_path and test_path.strip():
+            test_file = Path(temp_extract) / test_path
+            if test_file.exists():
+                test_code = test_file.read_text(encoding='utf-8')
+        
+        progress(0.5, desc="Executing in Modal sandbox...")
+        
+        # Call Modal function (import from server.py)
+        try:
+            from server import apply_refactoring_safely
+            
+            # Execute refactoring in Modal
+            result = apply_refactoring_safely(file_path, instruction, test_path)
+            
+            progress(0.8, desc="Packaging results...")
+            
+            # If successful, create output ZIP
+            if "✅" in result and "PASSED" in result:
+                # Copy entire project to output
+                shutil.copytree(temp_extract, Path(temp_output) / "project")
+                
+                # Create ZIP
+                output_zip_path = Path(temp_output) / "refactored_project.zip"
+                with zipfile.ZipFile(output_zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    for root, dirs, files in os.walk(Path(temp_output) / "project"):
+                        for file in files:
+                            file_path_full = Path(root) / file
+                            arcname = file_path_full.relative_to(Path(temp_output) / "project")
+                            zipf.write(file_path_full, arcname)
+                
+                progress(1.0, desc="Complete!")
+                
+                # Cleanup extract dir
+                shutil.rmtree(temp_extract)
+                
+                return result, gr.update(visible=True, value=str(output_zip_path))
+            else:
+                # Failed - don't provide download
+                shutil.rmtree(temp_extract)
+                shutil.rmtree(temp_output)
+                return result, gr.update(visible=False)
+                
+        except ImportError:
+            shutil.rmtree(temp_extract)
+            shutil.rmtree(temp_output)
+            return "⚠️ Modal integration not configured. Set up Modal credentials in Space secrets.", gr.update(visible=False)
+            
+    except Exception as e:
+        if 'temp_extract' in locals():
+            shutil.rmtree(temp_extract)
+        if 'temp_output' in locals():
+            shutil.rmtree(temp_output)
+        return f"❌ Execution failed: {str(e)}", gr.update(visible=False)
 # --- HELPER FUNCTIONS ---
 def render_plantuml(puml_text: str):
     """Render PlantUML to image"""
