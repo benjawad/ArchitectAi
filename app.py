@@ -865,7 +865,7 @@ with gr.Blocks(
             multi_module_selector = gr.Dropdown(label="Select Module to View", choices=[], interactive=True)
             
             with gr.Group():
-                multi_diagram_img = gr.Image(label="Module Use Case Diagram", type="pil", elem_classes=["diagram-container"], show_download_button=True)
+                multi_diagram_img = gr.Image(label="Module Use Case Diagram", type="pil", elem_classes=["diagram-container"])
             
             with gr.Accordion("📝 PlantUML Source", open=False):
                 multi_diagram_puml = gr.Code(language="markdown", label="PlantUML Code", lines=10)
@@ -907,7 +907,7 @@ with gr.Blocks(
             seq_multi_module_selector = gr.Dropdown(label="Select Module to View", choices=[], interactive=True)
             
             with gr.Group():
-                seq_multi_diagram_img = gr.Image(label="Module Sequence Diagram", type="pil", elem_classes=["diagram-container"], show_download_button=True)
+                seq_multi_diagram_img = gr.Image(label="Module Sequence Diagram", type="pil", elem_classes=["diagram-container"])
             
             with gr.Accordion("📝 PlantUML Source", open=False):
                 seq_multi_diagram_puml = gr.Code(language="markdown", label="PlantUML Code", lines=10)
