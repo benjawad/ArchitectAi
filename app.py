@@ -584,24 +584,30 @@ with gr.Blocks(
         with gr.Tab("☁️ Safe Refactoring (Modal)", id=3):
             gr.Markdown("""
                 ### Production-Safe Cloud Execution
-                Refactor code in isolated Modal sandboxes with automatic testing.
+                Upload your project, specify which file to refactor, and let Modal handle it safely.
             """)
             
             gr.HTML("""
                 <div class="info-card">
-                    <strong>🛡️ Safety Guaranteed:</strong> All changes run in isolated cloud containers. 
-                    Your local files are updated ONLY if tests pass. Zero risk to production code.
+                    <strong>🛡️ Safety Guaranteed:</strong> All changes run in isolated Modal containers. 
+                    Tests are executed in the cloud. Files updated only if tests pass.
                 </div>
             """)
             
             with gr.Row():
                 with gr.Column():
-                    gr.Markdown("#### 📁 Target Configuration")
+                    gr.Markdown("#### 📁 Upload & Configure")
+                    
+                    modal_zip = gr.File(
+                        label="📦 Upload Project (ZIP)",
+                        file_types=[".zip"],
+                        type="filepath"
+                    )
                     
                     file_input = gr.Textbox(
                         label="Target File (Relative Path)",
                         placeholder="services/payment_processor.py",
-                        info="File to refactor, relative to project root",
+                        info="File to refactor, relative to ZIP root",
                         lines=1
                     )
                     
@@ -614,8 +620,8 @@ with gr.Blocks(
                     
                     instruction_input = gr.Textbox(
                         label="Refactoring Instructions",
-                        placeholder="Extract Strategy pattern for payment methods. Create PaymentStrategy interface and separate classes for CreditCard, PayPal, Bitcoin...",
-                        info="Detailed instructions for the AI",
+                        placeholder="Extract Strategy pattern for payment methods...",
+                        info="Detailed instructions for AI",
                         lines=5
                     )
                     
@@ -631,7 +637,7 @@ with gr.Blocks(
                     
                     modal_output = gr.Markdown(
                         label="Cloud Execution Logs",
-                        value="Waiting for execution...",
+                        value="☁️ Waiting for execution...",
                         elem_classes=["code-block"]
                     )
                     
@@ -639,20 +645,25 @@ with gr.Blocks(
                         <div style="margin-top: 1rem; padding: 1rem; background: #f8f9fa; border-radius: 8px;">
                             <strong>How it works:</strong>
                             <ol style="margin: 0.5rem 0;">
-                                <li>Code is sent to Modal cloud</li>
-                                <li>Executed in isolated container</li>
+                                <li>Upload your project as ZIP</li>
+                                <li>Specify file to refactor</li>
+                                <li>Modal extracts & executes in cloud</li>
                                 <li>Tests run automatically</li>
-                                <li>Results returned safely</li>
+                                <li>Download refactored ZIP</li>
                             </ol>
                         </div>
                     """)
+                    
+                    download_output = gr.File(
+                        label="📥 Download Refactored Project",
+                        visible=False
+                    )
             
             execute_btn.click(
-                fn=run_modal_refactoring,
-                inputs=[file_input, instruction_input, test_input],
-                outputs=modal_output
+                fn=run_modal_refactoring_zip,
+                inputs=[modal_zip, file_input, instruction_input, test_input],
+                outputs=[modal_output, download_output]
             )
-    
     # FOOTER
     gr.HTML("""
         <div style="text-align: center; margin-top: 2rem; padding: 1rem; border-top: 1px solid #e9ecef;">
