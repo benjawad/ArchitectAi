@@ -12,6 +12,7 @@ from pathlib import Path
 from PIL import Image
 from plantuml import PlantUML
 
+from services.pattern_detector import PatternDetectionService, PatternRecommendation
 from services.sequence_service import CallGraphVisitor, ProjectSequenceAnalyzer, SequenceDiagramService
 from services.usecase_service import UseCaseDiagramService
 
@@ -195,6 +196,75 @@ def process_code_snippet(code_snippet: str, enrich_types: bool = False):
         return f"❌ Error: {e}", None, gr.update(visible=True, value="❌ Failed")
 
 # --- TAB 2: PROJECT MAP ---
+
+def process_pattern_detection_zip(zip_path, enrich: bool = True, provider: str = "openai", progress=gr.Progress()):
+    """Analyze entire project for design patterns"""
+    if not zip_path:
+        return "⚠️ Please upload a ZIP file first.", gr.update(visible=True, value="⚠️ No File"), gr.update(visible=False)
+    
+    temp_dir = None
+    try:
+        temp_dir = tempfile.mkdtemp()
+        
+        progress(0.2, desc="📦 Extracting ZIP...")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+        
+        progress(0.4, desc="🔍 Scanning Python files...")
+        
+        # Collect all Python files
+        all_code = []
+        file_count = 0
+        
+        for file_path in Path(temp_dir).rglob("*.py"):
+            parts = file_path.parts
+            if any(p.startswith(".") or p in ["venv", "env", "__pycache__", "node_modules"] for p in parts):
+                continue
+            try:
+                code = file_path.read_text(encoding='utf-8', errors='replace')
+                all_code.append(f"# === File: {file_path.name} ===\n{code}")
+                file_count += 1
+            except Exception:
+                continue
+        
+        if not all_code:
+            return "⚠️ No Python files found.", gr.update(visible=True, value="⚠️ No Files"), gr.update(visible=False)
+        
+        progress(0.6, desc=f"🏛️ Analyzing {file_count} files for patterns...")
+        
+        llm = None
+        if enrich:
+            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        
+        service = PatternDetectionService(llm=llm)
+        combined_code = "\n\n".join(all_code)
+        result = service.analyze_code(combined_code, enrich=enrich)
+        
+        progress(0.9, desc="📝 Generating report...")
+        report = service.format_report(result)
+        
+        progress(1.0, desc="✅ Complete!")
+        
+        status_msg = f"✅ Analyzed {file_count} files • Found {result['summary']['total_patterns']} patterns • {result['summary']['total_recommendations']} recommendations"
+        
+        return (
+            report,
+            gr.update(visible=True, value=status_msg),
+            gr.update(visible=True)  # Show results section
+        )
+        
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        logging.error(f"Pattern detection error: {error_detail}")
+        return (
+            f"❌ Error: {e}\n\nDetails:\n{error_detail}",
+            gr.update(visible=True, value=f"❌ Failed"),
+            gr.update(visible=True)
+        )
+    finally:
+        safe_cleanup(temp_dir)
+        
 def process_zip_upload(zip_path, progress=gr.Progress()):
     """Extract ZIP and analyze entire project structure"""
     if not zip_path:
@@ -230,6 +300,7 @@ def process_zip_upload(zip_path, progress=gr.Progress()):
         return f"❌ Error: {e}", None, gr.update(visible=True, value="❌ Failed")
     finally:
         safe_cleanup(temp_dir)
+
 
 # -- TAB 3 : USE CASE DIAGRAM ---
 
@@ -1048,10 +1119,15 @@ with gr.Blocks(
                 outputs=[text_output_1, img_output_1, status_banner_1]
             )
         
+
         # TAB 2: Project Map
-        with gr.Tab("📂 Project Map" , id = 1):
+        with gr.Tab("📂 Project Map", id=1):
             gr.Markdown("### Full Project Analysis\nUpload ZIP to visualize all classes and relationships.")
             gr.HTML('<div class="info-card"><strong>💡 Tip:</strong> Works best with 5-50 Python files.</div>')
+            
+            # Store the project structure for pattern detection
+            stored_project_structure = gr.State(None)
+            stored_project_code = gr.State(None)
             
             with gr.Row():
                 with gr.Column():
@@ -1064,12 +1140,340 @@ with gr.Blocks(
                     with gr.Accordion("📝 PlantUML Source", open=False):
                         text_output_2 = gr.Code(language="markdown", lines=10)
             
-            scan_btn.click(
-                fn=process_zip_upload,
-                inputs=project_zip,
-                outputs=[text_output_2, img_output_2, status_banner_2]
-            )
+            # Pattern Detection Section (appears after diagram generation)
+            with gr.Row(visible=False) as pattern_section:
+                with gr.Column():
+                    gr.Markdown("### 🏛️ Design Pattern Analysis")
+                    gr.Markdown("Detect patterns and get improvement recommendations from your project.")
+                    
+                    with gr.Row():
+                        pattern_enrich_toggle = gr.Checkbox(
+                            label="✨ AI Enrichment",
+                            value=True,
+                            info="Generate detailed justifications (slower)"
+                        )
+                        pattern_provider_choice = gr.Dropdown(
+                            choices=["openai", "sambanova", "nebius"],
+                            value="openai",
+                            label="LLM Provider",
+                            scale=1
+                        )
+                    
+                    detect_patterns_btn = gr.Button(
+                        "🔍 Detect Patterns & Recommendations",
+                        variant="secondary",
+                        size="lg"
+                    )
+                
+                with gr.Column():
+                    pattern_status = gr.Markdown(visible=False, elem_classes=["banner"])
+            
+            # Pattern Report Output
+            with gr.Row(visible=False) as pattern_results_section:
+                with gr.Column():
+                    pattern_report_output = gr.Markdown(
+                        label="Pattern Analysis Report",
+                        value="*Waiting for analysis...*"
+                    )
         
+
+            with gr.Row(visible=False) as pattern_uml_section:
+                gr.Markdown("### 💡 Pattern Recommendation Visualizations")
+                
+                with gr.Row():
+                    with gr.Column():
+                        gr.Markdown("#### Before (Current Structure)")
+                        pattern_before_img = gr.Image(label="Current Design", type="pil")
+                        with gr.Accordion("PlantUML Code", open=False):
+                            pattern_before_uml = gr.Code(language="markdown", lines=8)
+                    
+                    with gr.Column():
+                        gr.Markdown("#### After (Recommended Pattern)")
+                        pattern_after_img = gr.Image(label="Improved Design", type="pil")
+                        with gr.Accordion("PlantUML Code", open=False):
+                            pattern_after_uml = gr.Code(language="markdown", lines=8)
+
+            # Selector for which recommendation to visualize
+            with gr.Row(visible=False) as pattern_selector_section:
+                recommendation_dropdown = gr.Dropdown(
+                    label="Select Recommendation to Visualize",
+                    choices=[],
+                    interactive=True
+                )
+
+            def process_pattern_detection_from_structure(structure, code, enrich: bool = True, provider: str = "openai", progress=gr.Progress()):
+                """
+                Analyze patterns using already-parsed structure and code.
+                Now with UML diagram generation for recommendations!
+                """
+                
+                if not structure or not code:
+                    logging.warning("⚠️ Pattern detection called without structure or code")
+                    return (
+                        "⚠️ Please generate the class diagram first.",
+                        gr.update(visible=True, value="⚠️ No Data"),
+                        gr.update(visible=False),
+                        gr.update(visible=False),
+                        gr.update(visible=False),
+                        gr.update(choices=[]),
+                        None, None, "", ""
+                    )
+                
+                try:
+                    # Log what we received
+                    logging.info(f"🔍 Pattern detection using stored project: {len(structure)} components, {len(code)} chars of code")
+                    
+                    progress(0.2, desc="🏛️ Analyzing patterns...")
+                    
+                    # Get LLM if enrichment enabled
+                    llm = None
+                    if enrich:
+                        try:
+                            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+                            progress(0.4, desc="🤖 AI analyzing patterns...")
+                        except Exception as e:
+                            logger.warning(f"LLM initialization failed: {e}, proceeding without enrichment")
+                    
+                    # Run pattern detection
+                    service = PatternDetectionService(llm=llm)
+                    
+                    progress(0.6, desc="🔍 Detecting patterns...")
+                    result = service.analyze_code(code[:100000], enrich=enrich)
+                    
+                    progress(0.8, desc="📝 Generating report...")
+                    report = service.format_report(result)
+                    
+                    # Generate UML for recommendations
+                    recommendation_choices = []
+                    first_before_uml = ""
+                    first_after_uml = ""
+                    first_before_img = None
+                    first_after_img = None
+                    
+                    if result['recommendations']:
+                        progress(0.9, desc="🎨 Generating UML diagrams...")
+                        
+                        # Store UML diagrams for all recommendations
+                        for i, rec_dict in enumerate(result['recommendations']):
+                            rec = PatternRecommendation(**rec_dict)
+                            recommendation_choices.append(f"{i+1}. {rec.pattern} - {rec.location}")
+                            
+                            # Generate UML for first recommendation
+                            if i == 0:
+                                recommender = service.recommender
+                                before_uml, after_uml = recommender.generate_recommendation_uml(rec, structure, code)
+                                
+                                first_before_uml = before_uml
+                                first_after_uml = after_uml
+                                
+                                # Render UML to images
+                                _, first_before_img = render_plantuml(before_uml)
+                                _, first_after_img = render_plantuml(after_uml)
+                    
+                    progress(1.0, desc="✅ Complete!")
+                    
+                    # Create status message
+                    patterns_count = result['summary']['total_patterns']
+                    recs_count = result['summary']['total_recommendations']
+                    files_analyzed = len(set(item.get('source_file', 'unknown') for item in structure))
+                    
+                    status_msg = f"✅ Analyzed {files_analyzed} files • Found {patterns_count} pattern(s) • {recs_count} recommendation(s)"
+                    
+                    show_uml = recs_count > 0
+                    
+                    return (
+                        report,
+                        gr.update(visible=True, value=status_msg),
+                        gr.update(visible=True),  # Show report
+                        gr.update(visible=show_uml),  # Show UML section if recommendations exist
+                        gr.update(visible=show_uml),  # Show selector if recommendations exist
+                        gr.update(choices=recommendation_choices, value=recommendation_choices[0] if recommendation_choices else None),
+                        first_before_img,
+                        first_after_img,
+                        first_before_uml,
+                        first_after_uml
+                    )
+                    
+                except Exception as e:
+                    import traceback
+                    error_detail = traceback.format_exc()
+                    logger.error(f"Pattern detection error: {error_detail}")
+                    
+                    return (
+                        f"❌ Error during pattern detection:\n\n{str(e)}\n\n**Details:**\n```\n{error_detail[:500]}\n```",
+                        gr.update(visible=True, value="❌ Analysis Failed"),
+                        gr.update(visible=True),
+                        gr.update(visible=False),
+                        gr.update(visible=False),
+                        gr.update(choices=[]),
+                        None, None, "", ""
+                    )
+                
+            def update_recommendation_visualization(selected_rec, structure, code, enrich, provider):
+                """Update UML diagrams when user selects different recommendation"""
+                if not selected_rec or not structure:
+                    return None, None, "", ""
+                
+                try:
+                    # Parse selection (format: "1. Strategy - PaymentProcessor")
+                    rec_index = int(selected_rec.split(".")[0]) - 1
+                    
+                    # Re-run analysis to get recommendations
+                    llm = None
+                    if enrich:
+                        llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+                    
+                    service = PatternDetectionService(llm=llm)
+                    result = service.analyze_code(code[:100000], enrich=False)  # Don't re-enrich
+                    
+                    if rec_index < len(result['recommendations']):
+                        rec_dict = result['recommendations'][rec_index]
+                        rec = PatternRecommendation(**rec_dict)
+                        
+                        # Generate UML
+                        recommender = service.recommender
+                        before_uml, after_uml = recommender.generate_recommendation_uml(rec, structure, code)
+                        
+                        # Render to images
+                        _, before_img = render_plantuml(before_uml)
+                        _, after_img = render_plantuml(after_uml)
+                        
+                        return before_img, after_img, before_uml, after_uml
+                
+                except Exception as e:
+                    logger.error(f"Visualization update error: {e}")
+                
+                return None, None, "", ""
+
+            # Event handlers
+            def process_zip_and_store(zip_path, progress=gr.Progress()):
+                """Process ZIP, generate diagram, and store data for pattern detection"""
+                if not zip_path:
+                    return (
+                        "⚠️ Please upload a ZIP file.", 
+                        None, 
+                        gr.update(visible=True, value="⚠️ No File"),
+                        gr.update(visible=False),
+                        None,
+                        None
+                    )
+                
+                temp_dir = None
+                try:
+                    temp_dir = tempfile.mkdtemp()
+                    
+                    progress(0.2, desc="📦 Extracting ZIP...")
+                    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                        zip_ref.extractall(temp_dir)
+                    
+                    progress(0.5, desc="🔍 Analyzing project...")
+                    analyzer = ProjectAnalyzer(Path(temp_dir))
+                    full_structure = analyzer.analyze()
+                    
+                    if not full_structure:
+                        return (
+                            "⚠️ No Python code found.", 
+                            None, 
+                            gr.update(visible=True, value="⚠️ No Code"),
+                            gr.update(visible=False),
+                            None,
+                            None
+                        )
+                    
+                    # Collect raw code for pattern detection
+                    all_code = []
+                    file_count = 0
+                    for file_path in Path(temp_dir).rglob("*.py"):
+                        parts = file_path.parts
+                        if any(p.startswith(".") or p in ["venv", "env", "__pycache__", "node_modules"] for p in parts):
+                            continue
+                        try:
+                            code = file_path.read_text(encoding='utf-8', errors='replace')
+                            # Add file header for better pattern detection context
+                            rel_path = file_path.relative_to(temp_dir)
+                            all_code.append(f"# === File: {rel_path} ===\n{code}")
+                            file_count += 1
+                        except Exception:
+                            continue
+                    
+                    combined_code = "\n\n".join(all_code)
+                    
+                    # Log info for debugging
+                    logging.info(f"📊 Stored {file_count} Python files ({len(combined_code)} chars) for pattern detection")
+                    
+                    progress(0.8, desc="🎨 Generating diagram...")
+                    converter = DeterministicPlantUMLConverter()
+                    puml_text = converter.convert(full_structure)
+                    text, image = render_plantuml(puml_text)
+                    
+                    progress(1.0, desc="✅ Complete!")
+                    
+                    return (
+                        text, 
+                        image, 
+                        gr.update(visible=True, value=f"✅ Found {len(full_structure)} components • {file_count} files ready for pattern analysis"),
+                        gr.update(visible=True),  # Show pattern detection section
+                        full_structure,  # Store structure for pattern detection
+                        combined_code   # Store code for pattern detection
+                    )
+                    
+                except zipfile.BadZipFile:
+                    return (
+                        "❌ Invalid ZIP file.", 
+                        None, 
+                        gr.update(visible=True, value="❌ Bad ZIP"),
+                        gr.update(visible=False),
+                        None,
+                        None
+                    )
+                except Exception as e:
+                    logger.error(f"Project analysis error: {e}")
+                    return (
+                        f"❌ Error: {e}", 
+                        None, 
+                        gr.update(visible=True, value="❌ Failed"),
+                        gr.update(visible=False),
+                        None,
+                        None
+                    )
+                finally:
+                    safe_cleanup(temp_dir)
+            
+            scan_btn.click(
+                fn=process_zip_and_store,
+                inputs=project_zip,
+                outputs=[
+                    text_output_2, 
+                    img_output_2, 
+                    status_banner_2,
+                    pattern_section,
+                    stored_project_structure,  # Store for pattern detection
+                    stored_project_code        # Store for pattern detection
+                ]
+            )
+            
+            detect_patterns_btn.click(
+                fn=process_pattern_detection_from_structure,
+                inputs=[stored_project_structure, stored_project_code, pattern_enrich_toggle, pattern_provider_choice],
+                outputs=[
+                    pattern_report_output, 
+                    pattern_status, 
+                    pattern_results_section,
+                    pattern_uml_section,  
+                    pattern_selector_section, 
+                    recommendation_dropdown,  
+                    pattern_before_img,  
+                    pattern_after_img,  
+                    pattern_before_uml,  
+                    pattern_after_uml  
+                ]
+            )
+            recommendation_dropdown.change(
+                fn=update_recommendation_visualization,
+                inputs=[recommendation_dropdown, stored_project_structure, stored_project_code, pattern_enrich_toggle, pattern_provider_choice],
+                outputs=[pattern_before_img, pattern_after_img, pattern_before_uml, pattern_after_uml]
+            )
+
         # TAB 3: MULTI-MODULE USE CASES
         
         with gr.Tab("📊 Multi-Module Use Cases", id=2):
