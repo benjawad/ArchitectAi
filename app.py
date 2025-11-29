@@ -1078,41 +1078,94 @@ with gr.Blocks(
     # HEADER
     gr.HTML("""
         <div class="main-header">
-            <h1>🏛️ ArchitectAI</h1>
-            <p>Autonomous Cloud Refactoring with Modal Sandboxes</p>
-            <div class="sponsors">
-                <span class="sponsor-badge">🔷 Anthropic MCP</span>
-                <span class="sponsor-badge">☁️ Modal</span>
-                <span class="sponsor-badge">🤖 OpenAI</span>
-                <span class="sponsor-badge">⚡ SambaNova</span>
-                <span class="sponsor-badge">🚀 Nebius</span>
+            <div style="display: inline-flex; align-items: center; gap: 12px; margin-bottom: 1rem;">
+                <h1 style="margin: 0; font-family: 'Georgia', serif; font-size: 2.5rem; font-weight: 400; letter-spacing: -0.02em;">ArchitectAI</h1>
+                <span style="background: #f5f2ee; color: #888; padding: 4px 12px; border-radius: 12px; font-size: 0.7rem; font-weight: 600; border: 1px solid #e8e4dd;">v1.0</span>
+            </div>
+            
+            <p style="font-size: 1.1rem; color: #666; margin: 0 auto 0.5rem; max-width: 650px; line-height: 1.6;">
+                Transform codebases into clear architectural insights
+            </p>
+            
+            <p style="font-size: 0.85rem; color: #999; margin: 0 0 2rem; font-weight: 400;">
+                Multi-module diagrams • Pattern intelligence • Evolution tracking • AI refactoring
+            </p>
+            
+            <div style="display: flex; justify-content: center; align-items: center; gap: 20px; flex-wrap: wrap; padding-top: 1rem;">
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #888; font-weight: 600; padding: 4px 10px; background: #f9f6f2; border-radius: 6px; border: 1px solid #e8e4dd;">
+                    Hugging Face
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #888; font-weight: 600; padding: 4px 10px; background: #f9f6f2; border-radius: 6px; border: 1px solid #e8e4dd;">
+                    Anthropic
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #888; font-weight: 600; padding: 4px 10px; background: #f9f6f2; border-radius: 6px; border: 1px solid #e8e4dd;">
+                    Modal
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #888; font-weight: 600; padding: 4px 10px; background: #f9f6f2; border-radius: 6px; border: 1px solid #e8e4dd;">
+                    OpenAI
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #888; font-weight: 600; padding: 4px 10px; background: #f9f6f2; border-radius: 6px; border: 1px solid #e8e4dd;">
+                    SambaNova
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #888; font-weight: 600; padding: 4px 10px; background: #f9f6f2; border-radius: 6px; border: 1px solid #e8e4dd;">
+                    Nebius
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #888; font-weight: 600; padding: 4px 10px; background: #f9f6f2; border-radius: 6px; border: 1px solid #e8e4dd;">
+                    LlamaIndex
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #888; font-weight: 600; padding: 4px 10px; background: #f9f6f2; border-radius: 6px; border: 1px solid #e8e4dd;">
+                    Blaxcel Ai
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #888; font-weight: 600; padding: 4px 10px; background: #f9f6f2; border-radius: 6px; border: 1px solid #e8e4dd;">
+                    Gemini
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #888; font-weight: 600; padding: 4px 10px; background: #f9f6f2; border-radius: 6px; border: 1px solid #e8e4dd;">
+                    ElevenLabs
+                </span>
             </div>
         </div>
-    """)
-    
+        """)
     # TABS
     with gr.Tabs():
         
         # TAB 1: Single File
         with gr.Tab("📄 Single File Analysis" , id = 0):
-            gr.Markdown("### Quick Code Analysis\nPaste Python code to generate instant UML diagram.")
-            
+            gr.HTML('<div class="info-card"><strong>💡 Quick Analysis:</strong> Paste Python code to generate instant UML class diagram with optional AI-powered type enrichment.</div>')
+
             with gr.Row():
-                with gr.Column():
-                    code_input = gr.Code(language="python", label="Python Code", lines=15)
+                # LEFT COLUMN - Inputs
+                with gr.Column(scale=1):
+                    code_input = gr.Code(
+                        language="python",
+                        label="Python Code",
+                        lines=20,
+                        elem_classes=["code-input"]
+                    )
                     enrich_checkbox = gr.Checkbox(
                         label="✨ AI Type Enrichment",
                         value=False,
                         info="Use AI to infer missing type hints"
                     )
-                    analyze_btn = gr.Button("🚀 Analyze Code", variant="primary", size="lg")
-                
-                with gr.Column():
-                    status_banner_1 = gr.Markdown(visible=False, elem_classes=["banner"])
-                    img_output_1 = gr.Image(label="📊 Class Diagram", type="pil")
+                    analyze_btn = gr.Button(
+                        "🚀 Analyze Code",
+                        variant="primary",
+                        size="lg",
+                        elem_classes=["primary-button"]
+                    )
+
+                # RIGHT COLUMN - Results
+                with gr.Column(scale=2):
+                    with gr.Group(elem_classes=["output-card"]):
+                        status_banner_1 = gr.Markdown(visible=False, elem_classes=["banner"])
+                        img_output_1 = gr.Image(
+                            label="📊 Class Diagram",
+                            type="pil",
+                            elem_classes=["diagram-container"]
+                        )
+
                     with gr.Accordion("📝 PlantUML Source", open=False):
                         text_output_1 = gr.Code(language="markdown", lines=10)
-            
+
             analyze_btn.click(
                 fn=process_code_snippet,
                 inputs=[code_input, enrich_checkbox],
@@ -1122,30 +1175,46 @@ with gr.Blocks(
 
         # TAB 2: Project Map
         with gr.Tab("📂 Project Map", id=1):
-            gr.Markdown("### Full Project Analysis\nUpload ZIP to visualize all classes and relationships.")
-            gr.HTML('<div class="info-card"><strong>💡 Tip:</strong> Works best with 5-50 Python files.</div>')
-            
+            gr.HTML('<div class="info-card"><strong>🗺️ Full Project Analysis:</strong> Upload a ZIP file to visualize all classes, relationships, and design patterns in your Python project. Works best with 5-50 files.</div>')
+
             # Store the project structure for pattern detection
             stored_project_structure = gr.State(None)
             stored_project_code = gr.State(None)
-            
+
             with gr.Row():
-                with gr.Column():
-                    project_zip = gr.File(label="📦 Upload Project (ZIP)", file_types=[".zip"], type="filepath")
-                    scan_btn = gr.Button("🔍 Scan Project", variant="primary", size="lg")
-                
-                with gr.Column():
-                    status_banner_2 = gr.Markdown(visible=False, elem_classes=["banner"])
-                    img_output_2 = gr.Image(label="🗺️ Architecture", type="pil")
+                # LEFT COLUMN - Upload
+                with gr.Column(scale=1):
+                    project_zip = gr.File(
+                        label="📦 Upload Project (ZIP)",
+                        file_types=[".zip"],
+                        type="filepath",
+                        elem_classes=["file-upload"]
+                    )
+                    scan_btn = gr.Button(
+                        "🔍 Scan Project",
+                        variant="primary",
+                        size="lg",
+                        elem_classes=["primary-button"]
+                    )
+
+                # RIGHT COLUMN - Results
+                with gr.Column(scale=2):
+                    with gr.Group(elem_classes=["output-card"]):
+                        status_banner_2 = gr.Markdown(visible=False, elem_classes=["banner"])
+                        img_output_2 = gr.Image(
+                            label="🗺️ Architecture Map",
+                            type="pil",
+                            elem_classes=["diagram-container"]
+                        )
+
                     with gr.Accordion("📝 PlantUML Source", open=False):
                         text_output_2 = gr.Code(language="markdown", lines=10)
             
             # Pattern Detection Section (appears after diagram generation)
             with gr.Row(visible=False) as pattern_section:
-                with gr.Column():
-                    gr.Markdown("### 🏛️ Design Pattern Analysis")
-                    gr.Markdown("Detect patterns and get improvement recommendations from your project.")
-                    
+                with gr.Column(scale=1):
+                    gr.HTML('<div class="info-card"><strong>🏛️ Design Pattern Analysis:</strong> Detect existing patterns and get AI-powered recommendations for architectural improvements.</div>')
+
                     with gr.Row():
                         pattern_enrich_toggle = gr.Checkbox(
                             label="✨ AI Enrichment",
@@ -1158,48 +1227,59 @@ with gr.Blocks(
                             label="LLM Provider",
                             scale=1
                         )
-                    
+
                     detect_patterns_btn = gr.Button(
                         "🔍 Detect Patterns & Recommendations",
                         variant="secondary",
                         size="lg"
                     )
-                
-                with gr.Column():
-                    pattern_status = gr.Markdown(visible=False, elem_classes=["banner"])
+
+                with gr.Column(scale=2):
+                    with gr.Group(elem_classes=["output-card"]):
+                        pattern_status = gr.Markdown(visible=False, elem_classes=["banner"])
             
             # Pattern Report Output
             with gr.Row(visible=False) as pattern_results_section:
                 with gr.Column():
-                    pattern_report_output = gr.Markdown(
-                        label="Pattern Analysis Report",
-                        value="*Waiting for analysis...*"
-                    )
-        
+                    with gr.Group(elem_classes=["output-card"]):
+                        pattern_report_output = gr.Markdown(
+                            label="📊 Pattern Analysis Report",
+                            value="*Waiting for analysis...*"
+                        )
 
+            # Pattern UML Visualizations
             with gr.Row(visible=False) as pattern_uml_section:
-                gr.Markdown("### 💡 Pattern Recommendation Visualizations")
-                
-                with gr.Row():
-                    with gr.Column():
-                        gr.Markdown("#### Before (Current Structure)")
-                        pattern_before_img = gr.Image(label="Current Design", type="pil")
-                        with gr.Accordion("PlantUML Code", open=False):
-                            pattern_before_uml = gr.Code(language="markdown", lines=8)
-                    
-                    with gr.Column():
-                        gr.Markdown("#### After (Recommended Pattern)")
-                        pattern_after_img = gr.Image(label="Improved Design", type="pil")
-                        with gr.Accordion("PlantUML Code", open=False):
-                            pattern_after_uml = gr.Code(language="markdown", lines=8)
+                gr.HTML('<div class="info-card"><strong>💡 Before & After:</strong> Visual comparison of current design vs. recommended pattern implementation.</div>')
 
-            # Selector for which recommendation to visualize
             with gr.Row(visible=False) as pattern_selector_section:
                 recommendation_dropdown = gr.Dropdown(
-                    label="Select Recommendation to Visualize",
+                    label="📋 Select Recommendation to Visualize",
                     choices=[],
                     interactive=True
                 )
+
+            with gr.Row(visible=False) as pattern_comparison_section:
+                with gr.Column(scale=1):
+                    gr.Markdown("#### ⚠️ Before (Current Structure)")
+                    with gr.Group(elem_classes=["output-card"]):
+                        pattern_before_img = gr.Image(
+                            label="Current Design",
+                            type="pil",
+                            elem_classes=["diagram-container"]
+                        )
+                    with gr.Accordion("📝 PlantUML Code", open=False):
+                        pattern_before_uml = gr.Code(language="markdown", lines=8)
+
+                with gr.Column(scale=1):
+                    gr.Markdown("#### ✅ After (Recommended Pattern)")
+                    with gr.Group(elem_classes=["output-card"]):
+                        pattern_after_img = gr.Image(
+                            label="Improved Design",
+                            type="pil",
+                            elem_classes=["diagram-container"]
+                        )
+                    with gr.Accordion("📝 PlantUML Code", open=False):
+                        pattern_after_uml = gr.Code(language="markdown", lines=8)
 
             def process_pattern_detection_from_structure(structure, code, enrich: bool = True, provider: str = "openai", progress=gr.Progress()):
                 """
@@ -1287,6 +1367,7 @@ with gr.Blocks(
                         gr.update(visible=True),  # Show report
                         gr.update(visible=show_uml),  # Show UML section if recommendations exist
                         gr.update(visible=show_uml),  # Show selector if recommendations exist
+                        gr.update(visible=show_uml),  # Show comparison section if recommendations exist
                         gr.update(choices=recommendation_choices, value=recommendation_choices[0] if recommendation_choices else None),
                         first_before_img,
                         first_after_img,
@@ -1303,6 +1384,7 @@ with gr.Blocks(
                         f"❌ Error during pattern detection:\n\n{str(e)}\n\n**Details:**\n```\n{error_detail[:500]}\n```",
                         gr.update(visible=True, value="❌ Analysis Failed"),
                         gr.update(visible=True),
+                        gr.update(visible=False),
                         gr.update(visible=False),
                         gr.update(visible=False),
                         gr.update(choices=[]),
@@ -1456,16 +1538,17 @@ with gr.Blocks(
                 fn=process_pattern_detection_from_structure,
                 inputs=[stored_project_structure, stored_project_code, pattern_enrich_toggle, pattern_provider_choice],
                 outputs=[
-                    pattern_report_output, 
-                    pattern_status, 
+                    pattern_report_output,
+                    pattern_status,
                     pattern_results_section,
-                    pattern_uml_section,  
-                    pattern_selector_section, 
-                    recommendation_dropdown,  
-                    pattern_before_img,  
-                    pattern_after_img,  
-                    pattern_before_uml,  
-                    pattern_after_uml  
+                    pattern_uml_section,
+                    pattern_selector_section,
+                    pattern_comparison_section,
+                    recommendation_dropdown,
+                    pattern_before_img,
+                    pattern_after_img,
+                    pattern_before_uml,
+                    pattern_after_uml
                 ]
             )
             recommendation_dropdown.change(
@@ -1629,24 +1712,525 @@ with gr.Blocks(
     
     # FOOTER
     gr.HTML("""
-        <div style="text-align: center; margin-top: 2rem; padding: 1rem; border-top: 1px solid #e9ecef;">
-            <p style="color: #6c757d;">
-                Built for <strong>Hugging Face x Anthropic MCP Hackathon</strong><br>
-                <a href="#">📺 Demo</a> • <a href="#">📖 Docs</a> • <a href="#">💬 Social</a>
+        <div class="footer">
+            <p style="margin: 0 0 0.5rem 0; font-size: 0.9rem;">
+                Built for <strong style="color: #d97757;">Hugging Face × Anthropic MCP Hackathon</strong>
             </p>
+            <p style="margin: 0.5rem 0 1.5rem; color: #999; font-size: 0.85rem;">
+                Static analysis + LLM intelligence + Cloud execution
+            </p>
+            <div style="display: flex; justify-content: center; gap: 24px; font-size: 0.85rem;">
+                <a href="https://github.com/" target="_blank" style="color: #888; text-decoration: none; border-bottom: 1px dotted #e8e4dd;">GitHub</a>
+                <a href="https://huggingface.co/" target="_blank" style="color: #888; text-decoration: none; border-bottom: 1px dotted #e8e4dd;">Hugging Face</a>
+                <a href="#" target="_blank" style="color: #888; text-decoration: none; border-bottom: 1px dotted #e8e4dd;">Documentation</a>
+            </div>
         </div>
     """)
+
+
+architectai_theme = gr.themes.Soft(
+    primary_hue="orange",     # Warm terracotta accent like Claude
+    secondary_hue="slate",    # Neutral greys
+    neutral_hue="slate",      # Warm greys
+    spacing_size="md",        # Comfortable spacing
+    radius_size="md",         # Subtle rounded corners
+
+).set(
+    # LIGHT MODE - Warm Paper Aesthetic
+    body_background_fill="#faf8f5",           # Warm off-white
+    body_background_fill_dark="#1a1816",      # Warm charcoal (dark mode)
+    
+    background_fill_primary="#ffffff",         # Pure white cards
+    background_fill_primary_dark="#252220",    # Warm dark cards
+    
+    background_fill_secondary="#f5f2ee",       # Subtle warm grey
+    background_fill_secondary_dark="#2d2a27",  # Warm dark grey
+    
+    # BORDERS - Subtle and warm
+    border_color_primary="#e8e4dd",
+    border_color_primary_dark="#3d3935",
+    
+    # TEXT - High readability
+    body_text_color="#2d2d2d",
+    body_text_color_dark="#e8e6e3",
+    
+    block_title_text_color="#2d2d2d",
+    block_title_text_color_dark="#e8e6e3",
+    
+    block_label_text_color="#666666",
+    block_label_text_color_dark="#a8a6a3",
+    
+    # BUTTONS - Warm terracotta accent
+    button_primary_background_fill="#d97757",
+    button_primary_background_fill_hover="#c76646",
+    button_primary_background_fill_dark="#d97757",
+    button_primary_text_color="#ffffff",
+    button_primary_border_color="transparent",
+    
+    button_secondary_background_fill="#ffffff",
+    button_secondary_background_fill_hover="#f5f2ee",
+    button_secondary_border_color="#e8e4dd",
+    button_secondary_text_color="#2d2d2d",
+    
+    # INPUTS
+    input_background_fill="#ffffff",
+    input_background_fill_dark="#252220",
+    input_border_color="#e8e4dd",
+    input_border_color_dark="#3d3935",
+    input_border_color_focus="#d97757",
+    
+    # SHADOWS - Very subtle
+    shadow_drop="0 1px 3px rgba(0, 0, 0, 0.08)",
+    shadow_drop_lg="0 4px 12px rgba(0, 0, 0, 0.1)",
+    
+    # BLOCK STYLING
+    block_background_fill="#ffffff",
+    block_background_fill_dark="#252220",
+    block_border_width="1px",
+    block_border_color="#e8e4dd",
+    block_border_color_dark="#3d3935",
+    block_radius="12px",
+    
+    # PANEL
+    panel_background_fill="#faf8f5",
+    panel_background_fill_dark="#1a1816",
+)
+
+architectai_css = """
+/* ===================================================================
+   GLOBAL - Warm Paper Aesthetic
+   =================================================================== */
+.gradio-container {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+    max-width: 1400px !important;
+    margin: 0 auto !important;
+    background: #faf8f5 !important;
+    color: #2d2d2d !important;
+}
+
+/* Remove default gradio backgrounds */
+.gr-box,
+.gr-form,
+.gr-panel {
+    background: transparent !important;
+    border: none !important;
+}
+
+/* Smooth transitions */
+* {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* ===================================================================
+   HEADER - Serif Typography Like Claude
+   =================================================================== */
+.main-header {
+    background: transparent;
+    border-bottom: 1px solid #e8e4dd;
+    border-radius: 0;
+    padding: 3rem 2rem 2.5rem;
+    margin-bottom: 2.5rem;
+    text-align: center;
+    box-shadow: none;
+}
+
+.main-header h1 {
+    font-family: 'Georgia', 'Baskerville', 'Times New Roman', serif !important;
+    font-size: 2.5rem;
+    font-weight: 400; /* Light weight for elegance */
+    margin: 0 0 0.75rem 0;
+    color: #2d2d2d;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+.main-header .subtitle {
+    font-size: 1.05rem;
+    color: #666666;
+    margin: 0 auto 2rem;
+    font-weight: 400;
+    max-width: 600px;
+    line-height: 1.6;
+}
+
+.main-header .tagline {
+    font-size: 0.875rem;
+    color: #888888;
+    margin: 0.5rem 0 1.5rem;
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+}
+
+/* Sponsors - Minimalist Pills */
+.sponsors {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.sponsor-badge {
+    background: #ffffff;
+    color: #666666;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    border: 1px solid #e8e4dd;
+    font-size: 0.8rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.sponsor-badge:hover {
+    border-color: #d97757;
+    color: #d97757;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* ===================================================================
+   COMPONENTS - Clean & Minimal
+   =================================================================== */
+
+/* Cards/Output Groups */
+.output-card {
+    background: #ffffff !important;
+    border: 1px solid #e8e4dd !important;
+    border-radius: 12px !important;
+    padding: 1.5rem !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+    margin: 1rem 0 !important;
+}
+
+.output-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Info Cards - Warm Accent */
+.info-card {
+    background: #f9f6f2;
+    border: 1px solid #e8e4dd;
+    border-left: 3px solid #d97757;
+    padding: 1.25rem;
+    border-radius: 8px;
+    margin: 1.5rem 0;
+    color: #2d2d2d;
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
+.info-card strong {
+    color: #d97757;
+    font-weight: 600;
+}
+
+/* Status Banners - Subtle */
+.banner {
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    text-align: center;
+    font-weight: 500;
+    margin: 1rem 0;
+    background: #f5f2ee;
+    border: 1px solid #e8e4dd;
+    color: #2d2d2d;
+    font-size: 0.9rem;
+}
+
+/* ===================================================================
+   BUTTONS - Warm & Tactile
+   =================================================================== */
+
+/* Primary Button - Terracotta */
+button[variant="primary"],
+.primary-button {
+    background: #d97757 !important;
+    color: #ffffff !important;
+    font-weight: 500 !important;
+    padding: 0.75rem 1.5rem !important;
+    border-radius: 8px !important;
+    border: 1px solid transparent !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+    text-transform: none !important;
+    letter-spacing: normal !important;
+    font-size: 0.95rem !important;
+}
+
+button[variant="primary"]:hover,
+.primary-button:hover {
+    background: #c76646 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12) !important;
+}
+
+button[variant="primary"]:active {
+    transform: translateY(0) !important;
+}
+
+/* Secondary Buttons */
+button[variant="secondary"] {
+    background: #ffffff !important;
+    color: #2d2d2d !important;
+    border: 1px solid #e8e4dd !important;
+    font-weight: 500 !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+}
+
+button[variant="secondary"]:hover {
+    background: #f5f2ee !important;
+    border-color: #d97757 !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ===================================================================
+   INPUTS - Clean & Focused
+   =================================================================== */
+
+input[type="text"],
+input[type="number"],
+textarea,
+select {
+    background: #ffffff !important;
+    color: #2d2d2d !important;
+    border: 1px solid #e8e4dd !important;
+    border-radius: 8px !important;
+    padding: 0.75rem 1rem !important;
+    font-size: 0.95rem !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: #d97757 !important;
+    box-shadow: 0 0 0 3px rgba(217, 119, 87, 0.1) !important;
+    outline: none !important;
+}
+
+/* File Upload */
+.file-upload {
+    background: #fafaf9 !important;
+    border: 2px dashed #e8e4dd !important;
+    border-radius: 12px !important;
+    padding: 2rem !important;
+}
+
+.file-upload:hover {
+    border-color: #d97757 !important;
+    background: #f9f6f2 !important;
+}
+
+/* Checkboxes */
+input[type="checkbox"] {
+    width: 18px !important;
+    height: 18px !important;
+    border-radius: 4px !important;
+    border: 1.5px solid #e8e4dd !important;
+    background: #ffffff !important;
+}
+
+input[type="checkbox"]:checked {
+    background: #d97757 !important;
+    border-color: #d97757 !important;
+}
+
+/* ===================================================================
+   TABS - Clean Navigation
+   =================================================================== */
+.tab-nav {
+    background: transparent;
+    border-bottom: 1px solid #e8e4dd;
+    padding: 0;
+    margin-bottom: 2rem;
+    border-radius: 0;
+}
+
+.tab-nav button {
+    color: #666666;
+    font-weight: 500;
+    padding: 0.875rem 1.25rem;
+    border-radius: 0;
+    background: transparent;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    font-size: 0.9rem;
+}
+
+.tab-nav button[aria-selected="true"] {
+    color: #d97757;
+    border-bottom-color: #d97757;
+    background: transparent;
+    font-weight: 600;
+}
+
+.tab-nav button:hover:not([aria-selected="true"]) {
+    color: #2d2d2d;
+    background: rgba(217, 119, 87, 0.04);
+}
+
+/* ===================================================================
+   DIAGRAMS - Clean Canvas
+   =================================================================== */
+.diagram-container {
+    background: #ffffff;
+    border: 1px solid #e8e4dd;
+    border-radius: 8px;
+    padding: 2rem;
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* ===================================================================
+   CODE BLOCKS - Monospace Clarity
+   =================================================================== */
+pre,
+code {
+    background: #f5f2ee !important;
+    color: #2d2d2d !important;
+    border: 1px solid #e8e4dd !important;
+    border-radius: 6px !important;
+    font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace !important;
+    font-size: 0.875rem !important;
+}
+
+.code-container {
+    border-radius: 8px !important;
+    overflow: hidden !important;
+    border: 1px solid #e8e4dd !important;
+}
+
+/* ===================================================================
+   ACCORDIONS - Subtle Expansion
+   =================================================================== */
+details {
+    border: 1px solid #e8e4dd !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+    margin: 1rem 0 !important;
+    background: #ffffff !important;
+}
+
+summary {
+    background: #f9f6f2 !important;
+    padding: 1rem 1.25rem !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    color: #2d2d2d !important;
+    font-size: 0.9rem;
+}
+
+summary:hover {
+    background: #f5f2ee !important;
+}
+
+details[open] summary {
+    border-bottom: 1px solid #e8e4dd !important;
+}
+
+/* ===================================================================
+   FOOTER - Minimalist
+   =================================================================== */
+.footer {
+    text-align: center;
+    margin-top: 4rem;
+    padding: 2rem 1rem;
+    border-top: 1px solid #e8e4dd;
+    color: #888888;
+    font-size: 0.875rem;
+}
+
+.footer a {
+    color: #666666;
+    text-decoration: none;
+    margin: 0 0.75rem;
+    border-bottom: 1px dotted #e8e4dd;
+    transition: all 0.2s;
+}
+
+.footer a:hover {
+    color: #d97757;
+    border-bottom-color: #d97757;
+}
+
+/* ===================================================================
+   RESPONSIVE DESIGN
+   =================================================================== */
+@media (max-width: 768px) {
+    .main-header h1 {
+        font-size: 2rem;
+    }
+    
+    .main-header .subtitle {
+        font-size: 0.95rem;
+    }
+    
+    .sponsors {
+        gap: 0.5rem;
+    }
+    
+    .sponsor-badge {
+        font-size: 0.75rem;
+        padding: 0.4rem 0.875rem;
+    }
+    
+    .output-card {
+        padding: 1rem !important;
+    }
+}
+
+/* ===================================================================
+   ANIMATIONS - Subtle & Smooth
+   =================================================================== */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.banner {
+    animation: slideIn 0.3s ease-out;
+}
+
+.output-card {
+    animation: fadeIn 0.4s ease-out;
+}
+
+/* ===================================================================
+   UTILITY CLASSES
+   =================================================================== */
+.text-muted {
+    color: #888888;
+}
+
+.text-accent {
+    color: #d97757;
+}
+
+.border-accent {
+    border-color: #d97757 !important;
+}
+"""
+
 
 if __name__ == "__main__":
     demo.launch(
         server_name="0.0.0.0",
         server_port=7860,
         share=False,
-        theme=gr.themes.Soft(
-        primary_hue="purple",
-        secondary_hue="blue",
-        neutral_hue="slate",
-    ),
-    css=custom_css,
-
+        theme=architectai_theme,
+        css=architectai_css,
     )

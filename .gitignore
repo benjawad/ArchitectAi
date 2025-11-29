@@ -4,3 +4,5 @@ env/
 ENV/
 __pycache__/
 *.pyc
+a.py
+.env
