@@ -9,6 +9,13 @@ from langchain_core.language_models.chat_models import BaseChatModel
 
 from core.settings import settings
 
+# Try importing Gemini support
+try:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
 
 class LLMProvider(ABC):
     """
@@ -161,7 +168,7 @@ class OpenAIProvider(LLMProvider):
     def create_llm(self, model: Optional[str] = None, temperature: float = 0.0) -> ChatOpenAI:
         """
         Create OpenAI LLM instance with timeout and retry protection.
-        
+
         Includes:
         - Timeout protection (60 seconds)
         - Automatic retry on rate limits (max 3 attempts)
@@ -172,4 +179,51 @@ class OpenAIProvider(LLMProvider):
             temperature=temperature,
             request_timeout=60.0,  # 60 second timeout
             max_retries=3,  # Retry up to 3 times on rate limits
+        )
+
+
+class GeminiProvider(LLMProvider):
+    """Google Gemini LLM Provider Implementation."""
+
+    def __init__(self, api_key: Optional[str] = None):
+        """
+        Initialize Gemini provider.
+
+        Args:
+            api_key: API key (defaults to settings.GEMINI_API_KEY)
+        """
+        if not GEMINI_AVAILABLE:
+            raise RuntimeError(
+                "Gemini support not available. "
+                "Install with: pip install langchain-google-genai"
+            )
+        self.api_key = api_key or settings.GEMINI_API_KEY
+        self.validate_configuration()
+
+    @property
+    def default_model(self) -> str:
+        return "gemini-2.5-flash"
+
+    def validate_configuration(self) -> None:
+        """Validate Gemini configuration."""
+        if not self.api_key:
+            raise RuntimeError(
+                "Gemini configuration incomplete. "
+                "Set GEMINI_API_KEY in your .env file."
+            )
+
+    def create_llm(self, model: Optional[str] = None, temperature: float = 0.0) -> BaseChatModel:
+        """
+        Create Gemini LLM instance with timeout and retry protection.
+
+        Includes:
+        - Timeout protection (60 seconds)
+        - Automatic retry on rate limits (max 3 attempts)
+        """
+        return ChatGoogleGenerativeAI(
+            google_api_key=self.api_key,
+            model=model or self.default_model,
+            temperature=temperature,
+            request_timeout=60.0,
+            max_retries=3,
         )

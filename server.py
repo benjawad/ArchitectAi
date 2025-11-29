@@ -39,7 +39,7 @@ mcp = FastMCP("ArchitectAI", dependencies=["langchain-openai", "langchain-core"]
 
 # 2. Import Core Logic
 try:
-    from core.llm_factory import create_sambanova_llm, create_nebius_llm, create_openai_llm
+    from core.llm_factory import create_sambanova_llm, create_nebius_llm, create_openai_llm, create_gemini_llm
     from services.filesystem_service import FileSystemVisitor, TreeFormatter
     from services.architecture_service import (
         ArchitectureVisitor, FastTypeEnricher, DeterministicPlantUMLConverter
@@ -120,19 +120,29 @@ class LLMClientSingleton:
         
         strategies = [
             ("sambanova", create_sambanova_llm),
+            ("gemini", create_gemini_llm),
             ("nebius", create_nebius_llm),
             ("openai", create_openai_llm)
         ]
-        
-        if preferred_provider == "nebius":
+
+        if preferred_provider == "gemini":
+            strategies = [
+                ("gemini", create_gemini_llm),
+                ("sambanova", create_sambanova_llm),
+                ("nebius", create_nebius_llm),
+                ("openai", create_openai_llm)
+            ]
+        elif preferred_provider == "nebius":
             strategies = [
                 ("nebius", create_nebius_llm),
+                ("gemini", create_gemini_llm),
                 ("openai", create_openai_llm),
                 ("sambanova", create_sambanova_llm)
             ]
         elif preferred_provider == "openai":
             strategies = [
                 ("openai", create_openai_llm),
+                ("gemini", create_gemini_llm),
                 ("nebius", create_nebius_llm),
                 ("sambanova", create_sambanova_llm)
             ]

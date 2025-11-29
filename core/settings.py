@@ -55,7 +55,10 @@ class Settings(BaseSettings):
     
     # OpenAI LLM Configuration
     OPENAI_API_KEY: str | None = Field(None, env="OPENAI_API_KEY")
-    
+
+    # Gemini LLM Configuration
+    GEMINI_API_KEY: str | None = Field(None, env="GEMINI_API_KEY")
+
     # ========== MCP Configuration ==========
     # GitHub MCP
     GITHUB_TOKEN: str | None = Field(None, env="GITHUB_TOKEN")

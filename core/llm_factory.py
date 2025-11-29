@@ -9,7 +9,8 @@ from core.llm_providers import (
     LLMProvider,
     NebiusProvider,
     SambanovaProvider,
-    OpenAIProvider
+    OpenAIProvider,
+    GeminiProvider
 )
 
 
@@ -24,6 +25,7 @@ class LLMFactory:
         "nebius": NebiusProvider,
         "sambanova": SambanovaProvider,
         "openai": OpenAIProvider,
+        "gemini": GeminiProvider,
     }
     
     @classmethod
@@ -127,12 +129,29 @@ def create_openai_llm(
 ) -> BaseChatModel:
     """
     Create an OpenAI LLM instance.
-    
+
     Args:
         model: Model name (uses default if None)
         temperature: Temperature setting
-        
+
     Returns:
         Configured OpenAI LLM instance
     """
     return LLMFactory.create("openai", model=model, temperature=temperature)
+
+
+def create_gemini_llm(
+    model: Optional[str] = None,
+    temperature: float = 0.0
+) -> BaseChatModel:
+    """
+    Create a Gemini LLM instance.
+
+    Args:
+        model: Model name (uses default if None)
+        temperature: Temperature setting
+
+    Returns:
+        Configured Gemini LLM instance
+    """
+    return LLMFactory.create("gemini", model=model, temperature=temperature)

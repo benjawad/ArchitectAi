@@ -27,7 +27,7 @@ from services.architecture_service import (
 )
 from services.project_service import ProjectAnalyzer
 from services.refactoring_service import RefactoringAdvisor
-from core.llm_factory import create_openai_llm, create_sambanova_llm, create_nebius_llm
+from core.llm_factory import create_gemini_llm, create_openai_llm, create_sambanova_llm, create_nebius_llm
 
 # --- LOGGING SETUP ---
 logging.basicConfig(
@@ -55,29 +55,42 @@ class LLMClientSingleton:
     def get_client(self, preferred_provider: str = "openai", temperature: float = 0.0):
         """Get or create LLM client with provider fallback"""
         if self._llm_client is not None and self._current_provider == preferred_provider:
+            logger.info(f"✅ Reusing existing {preferred_provider} connection")
             return self._llm_client
         
         # Define provider strategies with fallbacks
         strategies = {
             "openai": [create_openai_llm, create_sambanova_llm, create_nebius_llm],
             "sambanova": [create_sambanova_llm, create_openai_llm, create_nebius_llm],
-            "nebius": [create_nebius_llm, create_openai_llm, create_sambanova_llm]
+            "nebius": [create_nebius_llm, create_openai_llm, create_sambanova_llm],
+            "gemini": [create_gemini_llm, create_sambanova_llm, create_nebius_llm]  
         }
+
         
         factories = strategies.get(preferred_provider, strategies["openai"])
-        names = ["openai", "sambanova", "nebius"]
+        factory_names = {
+            create_openai_llm: "openai",
+            create_sambanova_llm: "sambanova",
+            create_nebius_llm: "nebius",
+            create_gemini_llm: "gemini"
+        }
         
-        for factory, name in zip(factories, names):
+        for factory in factories:
+            provider_name = factory_names.get(factory, "unknown")
             try:
+                logger.info(f"🔄 Attempting to connect to {provider_name}...")
                 self._llm_client = factory(temperature=temperature)
-                self._current_provider = name
-                logger.info(f"✅ Connected to {name}")
+                self._current_provider = provider_name
+                logger.info(f"✅ Connected to {provider_name}")
                 return self._llm_client
             except Exception as e:
-                logger.warning(f"⚠️ {name} failed: {str(e)[:100]}")
+                logger.warning(f"⚠️ {provider_name} failed: {str(e)[:100]}")
         
         logger.error("❌ All LLM providers failed")
+        self._llm_client = None
+        self._current_provider = None
         return None
+
 
 # Global singleton instance
 _llm_singleton = LLMClientSingleton()
@@ -418,7 +431,7 @@ def process_folder_usecase_multi(folder_path: str, enrich: bool = True, provider
         diagram_outputs = []
         
         for module_name, puml_text in diagrams_dict.items():
-            if "error" in module_name.lower():
+            if not module_name or "error" in module_name.lower():
                 continue
             text, image = render_plantuml(puml_text)
             
@@ -532,7 +545,7 @@ def process_folder_usecase_multi_zip(zip_path, enrich: bool = True, provider: st
         diagram_outputs = []
         
         for module_name, puml_text in diagrams_dict.items():
-            if "error" in module_name.lower():
+            if not module_name or "error" in module_name.lower():
                 continue
             text, image = render_plantuml(puml_text)
             
@@ -866,7 +879,7 @@ def process_folder_sequence_multi(folder_path: str, enrich: bool = False, provid
         return f"❌ Error: {e}\n\nDetails:\n{error_detail}", [], [], None, "", gr.update(visible=True, value=f"❌ Failed")
 
 # --- TAB 5: AI PROPOSAL ---
-def process_proposal_zip(zip_path, progress=gr.Progress()):
+def process_proposal_zip(zip_path, provider: str = "sambanova", progress=gr.Progress()):
     """AI-powered architecture refactoring proposal"""
     if not zip_path:
         return "⚠️ Please upload a ZIP file.", None, None, gr.update(visible=True, value="⚠️ No File")
@@ -886,7 +899,12 @@ def process_proposal_zip(zip_path, progress=gr.Progress()):
         if not structure:
             return "⚠️ No code found.", None, None, gr.update(visible=True, value="⚠️ No Code")
         
-        advisor = RefactoringAdvisor()
+        # Get LLM client with selected provider
+        llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        if not llm:
+            return "❌ Failed to connect to LLM provider.", None, None, gr.update(visible=True, value="❌ LLM Failed")
+        
+        advisor = RefactoringAdvisor(llm=llm)
         proposal = advisor.propose_improvement(structure)
         
         if "error" in proposal:
@@ -1222,8 +1240,8 @@ with gr.Blocks(
                             info="Generate detailed justifications (slower)"
                         )
                         pattern_provider_choice = gr.Dropdown(
-                            choices=["openai", "sambanova", "nebius"],
-                            value="openai",
+                            choices=["sambanova", "gemini", "nebius", "openai"],
+                            value="sambanova",
                             label="LLM Provider",
                             scale=1
                         )
@@ -1573,7 +1591,7 @@ with gr.Blocks(
                         )
                     
                     with gr.Row():
-                        multi_provider = gr.Dropdown(choices=["sambanova", "nebius", "openai"], value="sambanova", label="LLM Provider")
+                        multi_provider = gr.Dropdown(choices=["sambanova", "gemini", "nebius", "openai"], value="sambanova", label="LLM Provider")
                         multi_enrich = gr.Checkbox(label="✨ AI Enrichment", value=True, info="Better actor detection")
                     
                     multi_scan_btn = gr.Button("🔍 Generate Module Diagrams", variant="primary", size="lg", elem_classes=["primary-button"])
@@ -1619,7 +1637,7 @@ with gr.Blocks(
                     )
 
                     with gr.Row():
-                        seq_multi_provider = gr.Dropdown(choices=["sambanova", "nebius", "openai"], value="sambanova", label="LLM Provider")
+                        seq_multi_provider = gr.Dropdown(choices=["sambanova", "gemini", "nebius", "openai"], value="sambanova", label="LLM Provider")
                         seq_multi_enrich = gr.Checkbox(label="✨ AI Enrichment", value=False, info="Slow but better names")
                     
                     seq_multi_scan_btn = gr.Button("🔍 Generate Module Sequences", variant="primary", size="lg", elem_classes=["primary-button"])
@@ -1652,25 +1670,36 @@ with gr.Blocks(
     
 
         # TAB 5: AI PROPOSAL
-        with gr.Tab("✨ AI Proposal" , id = 4):
+        with gr.Tab("✨ AI Proposal", id=4):
             gr.Markdown("### Architecture Recommendations\nAI detects anti-patterns and suggests improvements.")
             gr.HTML('<div class="info-card"><strong>🧠 AI-Powered:</strong> Suggests Strategy, Factory, Singleton patterns, etc.</div>')
             
             with gr.Row():
                 with gr.Column():
+                    gr.Markdown("#### 📁 Configuration")
                     proposal_zip = gr.File(label="📦 Upload Project (ZIP)", file_types=[".zip"], type="filepath")
+                    
+                    # Add provider dropdown
+                    proposal_provider = gr.Dropdown(
+                        choices=["sambanova", "gemini", "nebius", "openai"],
+                        value="sambanova",
+                        label="LLM Provider",
+                        info="Select AI provider for analysis"
+                    )
+                    
                     propose_btn = gr.Button("🧠 Generate Proposal", variant="primary", size="lg")
                     status_banner_3 = gr.Markdown(visible=False, elem_classes=["banner"])
                     proposal_output = gr.Code(language="json", label="📋 Analysis", lines=15)
                 
                 with gr.Column():
+                    gr.Markdown("#### 📊 Results")
                     img_output_3 = gr.Image(label="🎨 Proposed Architecture", type="pil")
                     with gr.Accordion("📝 Proposed PlantUML", open=False):
                         text_output_3 = gr.Code(language="markdown", lines=10)
             
             propose_btn.click(
                 fn=process_proposal_zip,
-                inputs=proposal_zip,
+                inputs=[proposal_zip, proposal_provider],
                 outputs=[proposal_output, text_output_3, img_output_3, status_banner_3]
             )
         
