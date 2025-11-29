@@ -170,43 +170,173 @@ def extract_file_list(zip_path):
         )
 
 # --- TAB 1: SINGLE FILE ANALYSIS ---
-def process_code_snippet(code_snippet: str, enrich_types: bool = False):
-    """Analyze single Python code snippet and generate UML diagram"""
+def process_code_snippet_with_patterns(code_snippet: str, enrich_types: bool = False, provider: str = "sambanova"):
+    """
+    Analyze single Python code snippet:
+    1. Detect design patterns and recommendations
+    2. Generate current UML diagram
+    3. Generate before/after diagrams for recommendations
+    """
     if not code_snippet.strip():
-        return "⚠️ Please enter some code.", None, gr.update(visible=True, value="⚠️ No Input")
+        return (
+            "⚠️ Please enter some code.",
+            None, None,
+            gr.update(visible=True, value="⚠️ No Input"),
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(choices=[]),
+            None, None, "", ""
+        )
     
     try:
-        # Parse code with AST
+        # STEP 1: Parse code with AST
         tree = ast.parse(code_snippet)
         visitor = ArchitectureVisitor()
         visitor.visit(tree)
         
         if not visitor.structure:
-            return "⚠️ No classes/functions found.", None, gr.update(visible=True, value="⚠️ No Structure")
+            return (
+                "⚠️ No classes/functions found.",
+                None, None,
+                gr.update(visible=True, value="⚠️ No Structure"),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(choices=[]),
+                None, None, "", ""
+            )
         
-        # Optional AI type enrichment
+        # STEP 2: Pattern Detection
+        llm = None
         if enrich_types:
+            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        
+        service = PatternDetectionService(llm=llm)
+        pattern_result = service.analyze_code(code_snippet, enrich=enrich_types)
+        
+        # Format pattern report
+        pattern_report = service.format_report(pattern_result)
+        
+        # STEP 3: Generate current UML diagram
+        if enrich_types and llm:
             try:
-                llm = _llm_singleton.get_client(preferred_provider="openai", temperature=0.0)
-                if llm:
-                    enricher = FastTypeEnricher(llm)
-                    visitor.structure = enricher.enrich(code_snippet, visitor.structure)
-                    logger.info("✓ Type enrichment complete")
+                enricher = FastTypeEnricher(llm)
+                visitor.structure = enricher.enrich(code_snippet, visitor.structure)
+                logger.info("✓ Type enrichment complete")
             except Exception as e:
                 logger.warning(f"Type enrichment failed: {e}")
         
-        # Convert to PlantUML
         converter = DeterministicPlantUMLConverter()
-        puml_text = converter.convert(visitor.structure)
-        text, image = render_plantuml(puml_text)
+        current_puml = converter.convert(visitor.structure)
+        _, current_image = render_plantuml(current_puml)
         
-        return text, image, gr.update(visible=True, value="✅ Analysis Complete!")
+        # STEP 4: Generate before/after UML for recommendations
+        recommendation_choices = []
+        first_before_img = None
+        first_after_img = None
+        first_before_uml = ""
+        first_after_uml = ""
         
+        if pattern_result['recommendations']:
+            for i, rec_dict in enumerate(pattern_result['recommendations']):
+                rec = PatternRecommendation(**rec_dict)
+                recommendation_choices.append(f"{i+1}. {rec.pattern} - {rec.location}")
+                
+                # Generate UML for first recommendation
+                if i == 0:
+                    recommender = service.recommender
+                    before_uml, after_uml = recommender.generate_recommendation_uml(rec, visitor.structure, code_snippet)
+                    
+                    first_before_uml = before_uml
+                    first_after_uml = after_uml
+                    
+                    # Render to images
+                    _, first_before_img = render_plantuml(before_uml)
+                    _, first_after_img = render_plantuml(after_uml)
+        
+        # Show pattern sections if recommendations exist
+        show_patterns = len(pattern_result['recommendations']) > 0
+        
+        status_msg = f"✅ Found {pattern_result['summary']['total_patterns']} pattern(s) • {pattern_result['summary']['total_recommendations']} recommendation(s)"
+        
+        return (
+            pattern_report,
+            current_puml,
+            current_image,
+            gr.update(visible=True, value=status_msg),
+            gr.update(visible=show_patterns),  # Pattern section
+            gr.update(visible=show_patterns),  # Comparison section
+            gr.update(choices=recommendation_choices, value=recommendation_choices[0] if recommendation_choices else None),
+            first_before_img,
+            first_after_img,
+            first_before_uml,
+            first_after_uml
+        )
+    
     except SyntaxError as se:
-        return f"❌ Syntax Error: {se}", None, gr.update(visible=True, value="❌ Syntax Error")
+        return (
+            f"❌ Syntax Error: {se}",
+            None, None,
+            gr.update(visible=True, value="❌ Syntax Error"),
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(choices=[]),
+            None, None, "", ""
+        )
     except Exception as e:
         logger.error(f"Code analysis error: {e}")
-        return f"❌ Error: {e}", None, gr.update(visible=True, value="❌ Failed")
+        import traceback
+        error_detail = traceback.format_exc()
+        return (
+            f"❌ Error: {e}\n\nDetails:\n{error_detail[:500]}",
+            None, None,
+            gr.update(visible=True, value="❌ Failed"),
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(choices=[]),
+            None, None, "", ""
+        )
+
+def update_single_file_recommendation(selected_rec, code, enrich, provider):
+    """Update UML diagrams when user selects different recommendation in single file tab"""
+    if not selected_rec or not code:
+        return None, None, "", ""
+    
+    try:
+        # Parse selection
+        rec_index = int(selected_rec.split(".")[0]) - 1
+        
+        # Re-analyze
+        llm = None
+        if enrich:
+            llm = _llm_singleton.get_client(preferred_provider=provider, temperature=0.0)
+        
+        # Parse structure
+        tree = ast.parse(code)
+        visitor = ArchitectureVisitor()
+        visitor.visit(tree)
+        
+        service = PatternDetectionService(llm=llm)
+        result = service.analyze_code(code, enrich=False)
+        
+        if rec_index < len(result['recommendations']):
+            rec_dict = result['recommendations'][rec_index]
+            rec = PatternRecommendation(**rec_dict)
+            
+            # Generate UML
+            recommender = service.recommender
+            before_uml, after_uml = recommender.generate_recommendation_uml(rec, visitor.structure, code)
+            
+            # Render to images
+            _, before_img = render_plantuml(before_uml)
+            _, after_img = render_plantuml(after_uml)
+            
+            return before_img, after_img, before_uml, after_uml
+    
+    except Exception as e:
+        logger.error(f"Recommendation update error: {e}")
+    
+    return None, None, "", ""
+
 
 # --- TAB 2: PROJECT MAP ---
 
@@ -1147,49 +1277,123 @@ with gr.Blocks(
     with gr.Tabs():
         
         # TAB 1: Single File
-        with gr.Tab("📄 Single File Analysis" , id = 0):
-            gr.HTML('<div class="info-card"><strong>💡 Quick Analysis:</strong> Paste Python code to generate instant UML class diagram with optional AI-powered type enrichment.</div>')
+        with gr.Tab("📄 Single File Analysis", id=0):
+            gr.HTML('<div class="info-card"><strong>💡 Smart Analysis:</strong> Paste Python code to detect design patterns, get recommendations, and see before/after UML visualizations.</div>')
 
-            with gr.Row():
-                # LEFT COLUMN - Inputs
-                with gr.Column(scale=1):
-                    code_input = gr.Code(
-                        language="python",
-                        label="Python Code",
-                        lines=20,
-                        elem_classes=["code-input"]
-                    )
+            # Store code for recommendation updates
+            stored_code = gr.State("")
+
+            # --- SECTION 1: CODE INPUT ---
+            with gr.Group(elem_classes=["output-card"]):
+                gr.Markdown("### 💻 Source Code")
+                code_input = gr.Code(
+                    language="python",
+                    label=None, 
+                    lines=15,
+                    elem_classes=["code-input"],
+                )
+                
+                with gr.Row():
                     enrich_checkbox = gr.Checkbox(
-                        label="✨ AI Type Enrichment",
+                        label="✨ AI Enhancement",
                         value=False,
-                        info="Use AI to infer missing type hints"
+                        info="Use AI for type hints"
                     )
-                    analyze_btn = gr.Button(
-                        "🚀 Analyze Code",
-                        variant="primary",
-                        size="lg",
-                        elem_classes=["primary-button"]
+                    provider_choice = gr.Dropdown(
+                        choices=["sambanova", "gemini", "nebius", "openai"],
+                        value="sambanova",
+                        label="LLM Provider",
+                        scale=1
                     )
+                
+                analyze_btn = gr.Button(
+                    "🔍 Analyze Code",
+                    variant="primary",
+                    size="lg",
+                    elem_classes=["primary-button"]
+                )
 
-                # RIGHT COLUMN - Results
-                with gr.Column(scale=2):
+            # --- SECTION 2: READ ME / RECOMMENDATIONS ---
+            gr.Markdown("### 📖 Analysis & Recommendations")
+            with gr.Group(elem_classes=["output-card"]):
+                status_banner_1 = gr.Markdown(visible=False, elem_classes=["banner"])
+                pattern_report_single = gr.Markdown(
+                    value="*Analysis report will appear here after clicking Analyze...*"
+                )
+
+            # --- SECTION 3: UML CODE & DIAGRAM ---
+            gr.Markdown("### 🎨 UML Visualization")
+            with gr.Group(elem_classes=["output-card"]):
+                img_output_1 = gr.Image(
+                    label="Class Structure",
+                    type="pil",
+                    elem_classes=["diagram-container"]
+                )
+                with gr.Accordion("📝 PlantUML Source Code", open=False):
+                    text_output_1 = gr.Code(language="markdown", lines=10, label="UML Code")
+
+            # --- HIDDEN SECTION: PATTERN VISUALIZATION (Appears on demand) ---
+            with gr.Row(visible=False) as pattern_uml_section_single:
+                gr.HTML('<div class="info-card" style="margin-top: 2rem;"><strong>💡 Recommended Improvements:</strong> Visual comparison showing how design patterns can improve your code structure.</div>')
+            
+            with gr.Row(visible=False) as pattern_selector_section_single:
+                recommendation_dropdown_single = gr.Dropdown(
+                    label="📋 Select Recommendation to Visualize",
+                    choices=[],
+                    interactive=True
+                )
+            
+            with gr.Row(visible=False) as pattern_comparison_section_single:
+                with gr.Column(scale=1):
+                    gr.Markdown("#### ⚠️ Before (Current Structure)")
                     with gr.Group(elem_classes=["output-card"]):
-                        status_banner_1 = gr.Markdown(visible=False, elem_classes=["banner"])
-                        img_output_1 = gr.Image(
-                            label="📊 Class Diagram",
+                        pattern_before_img_single = gr.Image(
+                            label="Current Design",
                             type="pil",
                             elem_classes=["diagram-container"]
                         )
+                    with gr.Accordion("📝 PlantUML Code", open=False):
+                        pattern_before_uml_single = gr.Code(language="markdown", lines=8)
 
-                    with gr.Accordion("📝 PlantUML Source", open=False):
-                        text_output_1 = gr.Code(language="markdown", lines=10)
-
+                with gr.Column(scale=1):
+                    gr.Markdown("#### ✅ After (Recommended Pattern)")
+                    with gr.Group(elem_classes=["output-card"]):
+                        pattern_after_img_single = gr.Image(
+                            label="Improved Design",
+                            type="pil",
+                            elem_classes=["diagram-container"]
+                        )
+                    with gr.Accordion("📝 PlantUML Code", open=False):
+                        pattern_after_uml_single = gr.Code(language="markdown", lines=8)
+            
+            # Event handlers
             analyze_btn.click(
-                fn=process_code_snippet,
-                inputs=[code_input, enrich_checkbox],
-                outputs=[text_output_1, img_output_1, status_banner_1]
+                fn=process_code_snippet_with_patterns,
+                inputs=[code_input, enrich_checkbox, provider_choice],
+                outputs=[
+                    pattern_report_single,     
+                    text_output_1,               
+                    img_output_1,                
+                    status_banner_1,             
+                    pattern_uml_section_single,  
+                    pattern_comparison_section_single,
+                    recommendation_dropdown_single,
+                    pattern_before_img_single,
+                    pattern_after_img_single,
+                    pattern_before_uml_single,
+                    pattern_after_uml_single
+                ]
+            ).then(
+                fn=lambda x: x,
+                inputs=code_input,
+                outputs=stored_code
             )
-        
+            
+            recommendation_dropdown_single.change(
+                fn=update_single_file_recommendation,
+                inputs=[recommendation_dropdown_single, stored_code, enrich_checkbox, provider_choice],
+                outputs=[pattern_before_img_single, pattern_after_img_single, pattern_before_uml_single, pattern_after_uml_single]
+            )
 
         # TAB 2: Project Map
         with gr.Tab("📂 Project Map", id=1):

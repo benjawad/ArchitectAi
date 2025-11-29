@@ -340,7 +340,7 @@ class PatternDetectorAST(ast.NodeVisitor):
 class PatternRecommender:
     """
     Analyzes code structure to recommend where patterns would help.
-    Uses code smells and structural analysis.
+    Uses AI to generate custom before/after UML diagrams based on actual code.
     """
     
     def __init__(self, llm=None):
@@ -360,401 +360,329 @@ class PatternRecommender:
     
     def generate_recommendation_uml(self, recommendation: PatternRecommendation, structure: List[Dict], code: str) -> tuple[str, str]:
         """
-        Generate before/after UML for a recommendation.
+        Generate before/after UML for a recommendation using AI analysis of actual code.
         Returns: (before_uml, after_uml)
         """
         if self.llm:
+            logger.info(f"🤖 Using AI to analyze {recommendation.pattern} pattern for {recommendation.location}")
             return self._generate_ai_uml(recommendation, structure, code)
         else:
-            return self._generate_template_uml(recommendation, structure)
+            logger.info(f"📊 Using structure-based UML for {recommendation.pattern} pattern")
+            return self._generate_structure_based_uml(recommendation, structure, code)
     
-    def _generate_template_uml(self, rec: PatternRecommendation, structure: List[Dict]) -> tuple[str, str]:
-        """Generate template-based UML for recommendations"""
+    def _generate_structure_based_uml(self, rec: PatternRecommendation, structure: List[Dict], code: str) -> tuple[str, str]:
+        """Generate UML from actual code structure when AI is not available"""
         
-        if rec.pattern == "Strategy":
-            before = self._strategy_before_uml(rec, structure)
-            after = self._strategy_after_uml(rec)
-            return before, after
+        # Extract actual class from structure
+        target_class = None
+        for item in structure:
+            if item.get("name") == rec.location or rec.location in item.get("name", ""):
+                target_class = item
+                break
         
-        elif rec.pattern == "Factory":
-            before = self._factory_before_uml(rec, structure)
-            after = self._factory_after_uml(rec)
-            return before, after
+        if not target_class:
+            # Fallback to first class if location not found
+            target_class = structure[0] if structure else {"name": rec.location, "methods": []}
         
-        elif rec.pattern == "Singleton":
-            before = self._singleton_before_uml(rec, structure)
-            after = self._singleton_after_uml(rec)
-            return before, after
+        class_name = target_class.get("name", rec.location)
+        methods = target_class.get("methods", [])
         
-        elif rec.pattern == "Observer":
-            before = self._observer_before_uml(rec, structure)
-            after = self._observer_after_uml(rec)
-            return before, after
-        
-        return "", ""
-    
-    def _strategy_before_uml(self, rec: PatternRecommendation, structure: List[Dict]) -> str:
-        """Generate BEFORE UML for Strategy pattern recommendation"""
-        class_name = rec.location
-        
-        return f"""@startuml
-title Before: {class_name} with Conditionals
+        # Generate BEFORE diagram with actual code
+        before = f"""@startuml
+title Before: {class_name} - Current Implementation
 skinparam classAttributeIconSize 0
 
 class {class_name} {{
-  + process(type, data)
-  - handle_type_a()
-  - handle_type_b()
-  - handle_type_c()
-}}
+"""
+        # Add actual methods from the class
+        for method in methods[:6]:  # Show up to 6 methods
+            before += f"  + {method}()\n"
+        
+        before += f"""}}
 
 note right of {class_name}
-  ❌ Problem: Multiple if/else branches
-  ❌ Hard to add new types
-  ❌ Violates Open/Closed Principle
+  ❌ Current Issue:
+  {rec.reason}
+  
+  ❌ Problems:
+  - Hard to extend
+  - High complexity
+  - Maintenance burden
+  
+  Location: {rec.location}
 end note
 
 @enduml"""
-    
-    def _strategy_after_uml(self, rec: PatternRecommendation) -> str:
-        """Generate AFTER UML for Strategy pattern recommendation"""
-        class_name = rec.location
         
-        return f"""@startuml
-title After: Strategy Pattern Applied
+        # Generate AFTER diagram with pattern applied
+        after = f"""@startuml
+title After: {rec.pattern} Pattern Applied to {class_name}
 skinparam classAttributeIconSize 0
 
-interface ProcessingStrategy {{
-  + process(data)
+{self._generate_pattern_structure(rec.pattern, class_name, methods)}
+
+note bottom
+  ✅ Benefits:
+  {rec.benefit}
+  
+  ✅ Improvements:
+  - ~{rec.complexity_reduction}% complexity reduction
+  - Better separation of concerns
+  - Easier to extend and maintain
+  
+  Pattern: {rec.pattern}
+  Implementation: {rec.implementation_hint}
+end note
+
+@enduml"""
+        
+        return before, after
+    
+    def _generate_pattern_structure(self, pattern: str, class_name: str, methods: List[str]) -> str:
+        """Generate pattern-specific structure using actual class name"""
+        
+        if pattern == "Strategy":
+            return f"""interface Strategy {{
+  + execute()
 }}
 
 class {class_name} {{
-  - strategy: ProcessingStrategy
-  + set_strategy(s: ProcessingStrategy)
-  + execute(data)
+  - strategy: Strategy
+  + set_strategy(s: Strategy)
+  + execute()
 }}
 
 class StrategyA {{
-  + process(data)
+  + execute()
 }}
 
 class StrategyB {{
-  + process(data)
+  + execute()
 }}
 
-class StrategyC {{
-  + process(data)
-}}
-
-ProcessingStrategy <|.. StrategyA
-ProcessingStrategy <|.. StrategyB
-ProcessingStrategy <|.. StrategyC
-{class_name} o-- ProcessingStrategy
-
-note right of ProcessingStrategy
-  ✅ Easy to add new strategies
-  ✅ Each strategy is independent
-  ✅ Follows Open/Closed Principle
-  ✅ ~{rec.complexity_reduction}% complexity reduction
-end note
-
-@enduml"""
-    
-    def _factory_before_uml(self, rec: PatternRecommendation, structure: List[Dict]) -> str:
-        """Generate BEFORE UML for Factory pattern recommendation"""
+Strategy <|.. StrategyA
+Strategy <|.. StrategyB
+{class_name} o-- Strategy"""
         
-        return f"""@startuml
-title Before: Scattered Object Creation
-skinparam classAttributeIconSize 0
-
-class ClientCode {{
-  + method1()
-  + method2()
-  + method3()
+        elif pattern == "Factory":
+            return f"""interface Product {{
+  + operation()
 }}
 
-class ProductA {{
-}}
-
-class ProductB {{
-}}
-
-class ProductC {{
-}}
-
-ClientCode ..> ProductA : creates directly
-ClientCode ..> ProductB : creates directly
-ClientCode ..> ProductC : creates directly
-
-note right of ClientCode
-  ❌ Object creation scattered everywhere
-  ❌ Hard to change instantiation logic
-  ❌ Tight coupling to concrete classes
-end note
-
-@enduml"""
-    
-    def _factory_after_uml(self, rec: PatternRecommendation) -> str:
-        """Generate AFTER UML for Factory pattern recommendation"""
-        
-        return f"""@startuml
-title After: Factory Pattern Applied
-skinparam classAttributeIconSize 0
-
-class ProductFactory {{
+class {class_name}Factory {{
   + create_product(type: str): Product
 }}
 
-interface Product {{
-  + operation()
-}}
-
 class ProductA {{
   + operation()
 }}
 
 class ProductB {{
   + operation()
-}}
-
-class ProductC {{
-  + operation()
-}}
-
-class ClientCode {{
-  - factory: ProductFactory
-  + use_product(type: str)
 }}
 
 Product <|.. ProductA
 Product <|.. ProductB
-Product <|.. ProductC
-ProductFactory ..> Product : creates
-ClientCode o-- ProductFactory
-
-note right of ProductFactory
-  ✅ Centralized creation logic
-  ✅ Easy to add new products
-  ✅ Client decoupled from concrete classes
-  ✅ ~{rec.complexity_reduction}% complexity reduction
-end note
-
-@enduml"""
-    
-    def _singleton_before_uml(self, rec: PatternRecommendation, structure: List[Dict]) -> str:
-        """Generate BEFORE UML for Singleton pattern recommendation"""
+{class_name}Factory ..> Product
+{class_name}Factory ..> ProductA
+{class_name}Factory ..> ProductB"""
         
-        return f"""@startuml
-title Before: Multiple Instances Possible
-skinparam classAttributeIconSize 0
-
-class SharedResource {{
-  + config: Dict
-  + connect()
-  + disconnect()
-}}
-
-class ClientA {{
-  - resource: SharedResource
-}}
-
-class ClientB {{
-  - resource: SharedResource
-}}
-
-class ClientC {{
-  - resource: SharedResource
-}}
-
-ClientA ..> SharedResource : creates new instance
-ClientB ..> SharedResource : creates new instance
-ClientC ..> SharedResource : creates new instance
-
-note right of SharedResource
-  ❌ Multiple instances created
-  ❌ Inconsistent state
-  ❌ Resource waste
-end note
-
-@enduml"""
-    
-    def _singleton_after_uml(self, rec: PatternRecommendation) -> str:
-        """Generate AFTER UML for Singleton pattern recommendation"""
+        elif pattern == "Singleton":
+            return f"""class {class_name} <<Singleton>> {{
+  - {{static}} _instance: {class_name}
+  - __init__()
+  + {{static}} get_instance(): {class_name}
+"""
+            + "\n".join(f"  + {m}()" for m in methods[:4]) + "\n}"
         
-        return """@startuml
-title After: Singleton Pattern Applied
-skinparam classAttributeIconSize 0
-
-class SharedResource {{
-  - {static} _instance: SharedResource
-  - config: Dict
-  + {static} get_instance(): SharedResource
-  + connect()
-  + disconnect()
-}}
-
-class ClientA {{
-}}
-
-class ClientB {{
-}}
-
-class ClientC {{
-}}
-
-ClientA ..> SharedResource : uses singleton
-ClientB ..> SharedResource : uses singleton
-ClientC ..> SharedResource : uses singleton
-
-note right of SharedResource
-  ✅ Single instance guaranteed
-  ✅ Global access point
-  ✅ Consistent state
-  ✅ ~{rec.complexity_reduction}% complexity reduction
-end note
-
-@enduml"""
-    
-    def _observer_before_uml(self, rec: PatternRecommendation, structure: List[Dict]) -> str:
-        """Generate BEFORE UML for Observer pattern recommendation"""
-        
-        return f"""@startuml
-title Before: Tight Coupling for Notifications
-skinparam classAttributeIconSize 0
-
-class EventSource {{
-  + notify_a()
-  + notify_b()
-  + notify_c()
-}}
-
-class ListenerA {{
-  + update()
-}}
-
-class ListenerB {{
-  + update()
-}}
-
-class ListenerC {{
-  + update()
-}}
-
-EventSource --> ListenerA
-EventSource --> ListenerB
-EventSource --> ListenerC
-
-note right of EventSource
-  ❌ Tightly coupled to all listeners
-  ❌ Hard to add/remove listeners
-  ❌ Manual notification logic
-end note
-
-@enduml"""
-    
-    def _observer_after_uml(self, rec: PatternRecommendation) -> str:
-        """Generate AFTER UML for Observer pattern recommendation"""
-        
-        return f"""@startuml
-title After: Observer Pattern Applied
-skinparam classAttributeIconSize 0
-
-interface Observer {{
+        elif pattern == "Observer":
+            return f"""interface Observer {{
   + update(event)
 }}
 
-class Subject {{
+class {class_name} {{
   - observers: List<Observer>
   + attach(o: Observer)
   + detach(o: Observer)
   + notify()
 }}
 
-class ListenerA {{
+class ObserverA {{
   + update(event)
 }}
 
-class ListenerB {{
+class ObserverB {{
   + update(event)
 }}
 
-class ListenerC {{
-  + update(event)
-}}
-
-Observer <|.. ListenerA
-Observer <|.. ListenerB
-Observer <|.. ListenerC
-Subject o-- Observer
-
-note right of Subject
-  ✅ Loosely coupled
-  ✅ Dynamic listener management
-  ✅ Automatic notifications
-  ✅ ~{rec.complexity_reduction}% complexity reduction
-end note
-
-@enduml"""
+Observer <|.. ObserverA
+Observer <|.. ObserverB
+{class_name} o-- Observer"""
+        
+        else:
+            # Generic pattern structure
+            return f"""class {class_name}Improved {{
+"""
+            + "\n".join(f"  + {m}()" for m in methods[:4]) + "\n}"
     
     def _generate_ai_uml(self, rec: PatternRecommendation, structure: List[Dict], code: str) -> tuple[str, str]:
-        """Generate AI-powered UML for recommendations"""
+        """
+        🤖 AI-POWERED UML GENERATION
+        
+        This is the key method that makes diagrams show YOUR actual code,
+        not generic templates.
+        """
         try:
-            prompt = f"""
-Generate two PlantUML class diagrams for a design pattern recommendation.
+            # Extract relevant code section for the target class
+            relevant_code = self._extract_relevant_code(rec.location, code)
+            
+            # Get actual class details from structure
+            target_class = None
+            for item in structure:
+                if item.get("name") == rec.location:
+                    target_class = item
+                    break
+            
+            # Prepare context for AI
+            context = {
+                "class_name": rec.location,
+                "pattern": rec.pattern,
+                "reason": rec.reason,
+                "benefit": rec.benefit,
+                "complexity_reduction": rec.complexity_reduction,
+                "code_snippet": relevant_code[:1500],
+                "class_details": target_class if target_class else {},
+                "all_classes": [item.get("name") for item in structure if item.get("type") == "class"][:10]
+            }
+            
+            prompt = f"""You are an expert software architect analyzing REAL Python code.
 
-Pattern to apply: {rec.pattern}
-Location: {rec.location}
-Reason: {rec.reason}
+**ACTUAL CODE TO ANALYZE:**
+```python
+{context['code_snippet']}
+```
 
-Current code structure:
-{json.dumps(structure[:3], indent=2)}
+**CODE CONTEXT:**
+- Target class: `{context['class_name']}`
+- All classes in project: {', '.join(context['all_classes'])}
+- Current problem: {context['reason']}
+- Recommended pattern: {context['pattern']}
 
-Generate:
-1. BEFORE diagram: Show current problematic structure
-2. AFTER diagram: Show improved structure with {rec.pattern} pattern
+**YOUR TASK:**
+Generate TWO PlantUML class diagrams showing before/after applying {context['pattern']} pattern.
 
-Output as JSON:
-{{
-  "before": "@startuml...@enduml",
-  "after": "@startuml...@enduml"
-}}
+**CRITICAL REQUIREMENTS:**
+1. Use ACTUAL class names from the code above (e.g., `{context['class_name']}`, not "ClientCode")
+2. Use ACTUAL method names you see in the code
+3. Show REAL relationships between classes
+4. BEFORE diagram: Show current problematic structure
+5. AFTER diagram: Show improved structure with {context['pattern']} pattern
 
-Keep diagrams simple (4-6 classes max). Include notes explaining problems/benefits.
-OUTPUT ONLY VALID JSON.
+**DIAGRAM GUIDELINES:**
+- Keep simple: 4-6 classes maximum
+- Use actual names (no "ProductA", "ServiceA" generic names)
+- Add notes explaining problems (BEFORE) and benefits (AFTER)
+- Include complexity reduction: ~{context['complexity_reduction']}%
+
+**OUTPUT FORMAT (CRITICAL):**
+Return ONLY this JSON structure, nothing else:
+{{{{
+  "before": "@startuml\\ntitle Before: [use actual class name]\\nskinparam classAttributeIconSize 0\\n...\\n@enduml",
+  "after": "@startuml\\ntitle After: {context['pattern']} Pattern Applied\\nskinparam classAttributeIconSize 0\\n...\\n@enduml"
+}}}}
+
+DO NOT include ```json or ``` markers.
+DO NOT add any explanation text.
+OUTPUT ONLY THE JSON OBJECT.
 """
             
             messages = [
-                SystemMessage(content="You are a UML diagram expert. Output only valid JSON."),
+                SystemMessage(content="You are a UML expert. Analyze actual code and generate precise diagrams using real class/method names. Output only valid JSON, no markdown."),
                 HumanMessage(content=prompt)
             ]
             
+            logger.info(f"🤖 Sending code to AI for analysis...")
             response = self.llm.invoke(messages)
             content = response.content.strip()
             
-            # Clean JSON
+            # Clean up response - remove markdown if present
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
             elif "```" in content:
                 content = content.split("```")[1].split("```")[0].strip()
             
+            # Find JSON object boundaries
+            start = content.find("{")
+            end = content.rfind("}") + 1
+            if start >= 0 and end > start:
+                content = content[start:end]
+            
+            # Parse JSON
             result = json.loads(content)
-            return result.get("before", ""), result.get("after", "")
+            before = result.get("before", "")
+            after = result.get("after", "")
+            
+            # Validate UML syntax
+            if "@startuml" not in before or "@enduml" not in before:
+                logger.warning("❌ AI returned invalid BEFORE UML")
+                raise ValueError("Invalid BEFORE UML from AI")
+            
+            if "@startuml" not in after or "@enduml" not in after:
+                logger.warning("❌ AI returned invalid AFTER UML")
+                raise ValueError("Invalid AFTER UML from AI")
+            
+            logger.info(f"✅ AI successfully generated custom UML for {rec.pattern} pattern")
+            logger.info(f"   BEFORE diagram: {len(before)} chars")
+            logger.info(f"   AFTER diagram: {len(after)} chars")
+            
+            return before, after
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ Failed to parse AI response as JSON: {e}")
+            logger.error(f"   Response preview: {content[:200] if 'content' in locals() else 'N/A'}")
+            return self._generate_structure_based_uml(rec, structure, code)
             
         except Exception as e:
-            logger.warning(f"AI UML generation failed: {e}, using templates")
-            return self._generate_template_uml(rec, structure)
+            logger.error(f"❌ AI UML generation failed: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            logger.info("⚠️ Falling back to structure-based generation")
+            return self._generate_structure_based_uml(rec, structure, code)
     
+    def _extract_relevant_code(self, class_name: str, code: str) -> str:
+        """Extract the code section relevant to the class being analyzed"""
+        try:
+            tree = ast.parse(code)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef) and node.name == class_name:
+                    lines = code.split("\n")
+                    start = node.lineno - 1
+                    # Get reasonable chunk of code (not too much)
+                    end = node.end_lineno if hasattr(node, 'end_lineno') else start + 30
+                    end = min(end, start + 40)  # Max 40 lines
+                    return "\n".join(lines[start:end])
+        except Exception as e:
+            logger.warning(f"Failed to extract class code: {e}")
+        
+        # Fallback: search for class definition manually
+        lines = code.split("\n")
+        for i, line in enumerate(lines):
+            if f"class {class_name}" in line:
+                return "\n".join(lines[i:min(i+30, len(lines))])
+        
+        # Last resort: return first chunk of code
+        return code[:800]
+    
+    # Keep the existing _recommend_* methods unchanged
     def _recommend_strategy(self, structure: List[Dict], code: str):
         """Recommend Strategy pattern for complex conditionals"""
-        # Look for classes with many if-else statements
         for cls in structure:
             if cls.get("type") == "module":
                 continue
             
-            # Count conditionals in methods (simplified heuristic)
             conditional_count = code.count("if ") + code.count("elif ")
             
-            if conditional_count > 5:  # Threshold
+            if conditional_count > 5:
                 self.recommendations.append(PatternRecommendation(
                     pattern="Strategy",
                     location=cls["name"],
@@ -770,7 +698,6 @@ OUTPUT ONLY VALID JSON.
             if cls.get("type") == "module":
                 continue
             
-            # Look for multiple object instantiations
             if "(" in code and code.count("= ") > 3:
                 self.recommendations.append(PatternRecommendation(
                     pattern="Factory",
@@ -783,7 +710,6 @@ OUTPUT ONLY VALID JSON.
     
     def _recommend_singleton(self, structure: List[Dict], code: str):
         """Recommend Singleton for shared resources"""
-        # Look for global variables or module-level instances
         if "global " in code or code.count("_instance") > 0:
             self.recommendations.append(PatternRecommendation(
                 pattern="Singleton",
@@ -796,7 +722,6 @@ OUTPUT ONLY VALID JSON.
     
     def _recommend_observer(self, structure: List[Dict], code: str):
         """Recommend Observer for event handling"""
-        # Look for callback patterns or manual notification
         if "callback" in code.lower() or "notify" in code.lower():
             self.recommendations.append(PatternRecommendation(
                 pattern="Observer",
@@ -806,7 +731,6 @@ OUTPUT ONLY VALID JSON.
                 complexity_reduction=25,
                 implementation_hint="Create Subject class with attach/detach/notify methods"
             ))
-
 
 class PatternEnricher:
     """
