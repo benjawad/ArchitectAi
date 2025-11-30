@@ -1273,6 +1273,15 @@ with gr.Blocks(
             </div>
         </div>
         """)
+    
+    # DEMO BANNER
+    gr.HTML("""
+        <div style="background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%); padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem; text-align: center; border: 3px solid #ffc107; box-shadow: 0 4px 12px rgba(255,193,7,0.3);">
+            <h2 style="margin: 0 0 0.5rem 0; font-size: 1.5rem; color: #000;">⚡ Try Demo Projects for Instant Results!</h2>
+            <p style="margin: 0; font-size: 1rem; color: #333;">Click examples below each tab to load pre-built projects • E-commerce (15 files) • FastAPI (8 files) • See patterns detected in seconds!</p>
+        </div>
+    """)
+    
     # TABS
     with gr.Tabs():
         
@@ -1393,6 +1402,62 @@ with gr.Blocks(
                 fn=update_single_file_recommendation,
                 inputs=[recommendation_dropdown_single, stored_code, enrich_checkbox, provider_choice],
                 outputs=[pattern_before_img_single, pattern_after_img_single, pattern_before_uml_single, pattern_after_uml_single]
+            )
+            
+            # EXAMPLES
+            gr.Examples(
+                examples=[
+                    ["""# Strategy Pattern Example
+from abc import ABC, abstractmethod
+
+class PaymentStrategy(ABC):
+    @abstractmethod
+    def pay(self, amount):
+        pass
+
+class CreditCardPayment(PaymentStrategy):
+    def pay(self, amount):
+        return f"Paid ${amount} with Credit Card"
+
+class PayPalPayment(PaymentStrategy):
+    def pay(self, amount):
+        return f"Paid ${amount} with PayPal"
+
+class ShoppingCart:
+    def __init__(self, payment_strategy):
+        self.payment_strategy = payment_strategy
+    
+    def checkout(self, total):
+        return self.payment_strategy.pay(total)
+""", False, "sambanova"],
+                    ["""# Singleton Pattern Example
+class Database:
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance.connection = None
+        return cls._instance
+    
+    def connect(self):
+        if not self.connection:
+            self.connection = "Connected to DB"
+        return self.connection
+
+# Factory Pattern Example
+class ProductFactory:
+    @staticmethod
+    def create_product(product_type):
+        if product_type == "book":
+            return Book()
+        elif product_type == "electronics":
+            return Electronics()
+        return None
+""", False, "sambanova"],
+                ],
+                inputs=[code_input, enrich_checkbox, provider_choice],
+                label="📚 Quick Examples - Click to Load"
             )
 
         # TAB 2: Project Map
@@ -1778,6 +1843,16 @@ with gr.Blocks(
                 inputs=[recommendation_dropdown, stored_project_structure, stored_project_code, pattern_enrich_toggle, pattern_provider_choice],
                 outputs=[pattern_before_img, pattern_after_img, pattern_before_uml, pattern_after_uml]
             )
+            
+            # EXAMPLES
+            gr.Examples(
+                examples=[
+                    ["demo_ecommerce.zip"],
+                    ["demo_fastapi.zip"],
+                ],
+                inputs=project_zip,
+                label="⚡ Demo Projects (Click to Load)"
+            )
 
         # TAB 3: MULTI-MODULE USE CASES
         
@@ -1825,6 +1900,16 @@ with gr.Blocks(
             
             multi_scan_btn.click(fn=process_folder_usecase_multi_zip, inputs=[multi_zip_input, multi_enrich, multi_provider], outputs=[multi_summary, multi_gallery, multi_module_selector, multi_diagram_img, multi_diagram_puml, multi_status_banner])
             multi_module_selector.change(fn=update_diagram_viewer, inputs=[multi_gallery, multi_module_selector], outputs=[multi_diagram_img, multi_diagram_puml])
+            
+            # EXAMPLES
+            gr.Examples(
+                examples=[
+                    ["demo_ecommerce.zip"],
+                    ["demo_fastapi.zip"],
+                ],
+                inputs=multi_zip_input,
+                label="⚡ Demo Projects (Click to Load)"
+            )
         
         # TAB 4: MULTI-MODULE SEQUENCES
         with gr.Tab("🎬 Multi-Module Sequences", id=3):
@@ -1871,6 +1956,16 @@ with gr.Blocks(
             
             seq_multi_scan_btn.click(fn=process_folder_sequence_multi_zip, inputs=[seq_multi_zip_input, seq_multi_enrich, seq_multi_provider], outputs=[seq_multi_summary, seq_multi_gallery, seq_multi_module_selector, seq_multi_diagram_img, seq_multi_diagram_puml, seq_multi_status_banner])
             seq_multi_module_selector.change(fn=update_seq_diagram_viewer, inputs=[seq_multi_gallery, seq_multi_module_selector], outputs=[seq_multi_diagram_img, seq_multi_diagram_puml])
+            
+            # EXAMPLES
+            gr.Examples(
+                examples=[
+                    ["demo_ecommerce.zip"],
+                    ["demo_fastapi.zip"],
+                ],
+                inputs=seq_multi_zip_input,
+                label="⚡ Demo Projects (Click to Load)"
+            )
     
 
         # TAB 5: AI PROPOSAL
@@ -1905,6 +2000,16 @@ with gr.Blocks(
                 fn=process_proposal_zip,
                 inputs=[proposal_zip, proposal_provider],
                 outputs=[proposal_output, text_output_3, img_output_3, status_banner_3]
+            )
+            
+            # EXAMPLES
+            gr.Examples(
+                examples=[
+                    ["demo_ecommerce.zip"],
+                    ["demo_fastapi.zip"],
+                ],
+                inputs=proposal_zip,
+                label="⚡ Demo Projects (Click to Load)"
             )
         
         # TAB 6: Modal Refactoring
@@ -1941,6 +2046,16 @@ with gr.Blocks(
                 fn=run_modal_refactoring_zip,
                 inputs=[modal_zip, file_dropdown, instruction_input, test_dropdown],
                 outputs=[modal_output, download_output]
+            )
+            
+            # EXAMPLES
+            gr.Examples(
+                examples=[
+                    ["demo_ecommerce.zip"],
+                    ["demo_fastapi.zip"],
+                ],
+                inputs=modal_zip,
+                label="⚡ Demo Projects (Click to Load)"
             )
     
     # FOOTER
