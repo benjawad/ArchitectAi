@@ -177,8 +177,8 @@ class OpenAIProvider(LLMProvider):
             api_key=self.api_key,
             model=model or self.default_model,
             temperature=temperature,
-            request_timeout=60.0,  # 60 second timeout
-            max_retries=3,  # Retry up to 3 times on rate limits
+            request_timeout=10.0, 
+            max_retries=3,  
         )
 
 
@@ -224,6 +224,6 @@ class GeminiProvider(LLMProvider):
             google_api_key=self.api_key,
             model=model or self.default_model,
             temperature=temperature,
-            request_timeout=60.0,
+            request_timeout=10.0,
             max_retries=3,
         )

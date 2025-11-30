@@ -12,6 +12,7 @@ from pathlib import Path
 from PIL import Image
 from plantuml import PlantUML
 
+from a import LLMClientSingleton
 from services.pattern_detector import PatternDetectionService, PatternRecommendation
 from services.sequence_service import CallGraphVisitor, ProjectSequenceAnalyzer, SequenceDiagramService
 from services.usecase_service import UseCaseDiagramService
@@ -39,57 +40,6 @@ logger = logging.getLogger(__name__)
 # --- CONFIG ---
 PLANTUML_SERVER_URL = 'http://www.plantuml.com/plantuml/img/'
 plantuml_client = PlantUML(url=PLANTUML_SERVER_URL)
-
-# --- SINGLETON LLM CLIENT ---
-class LLMClientSingleton:
-    """Singleton pattern for LLM client to avoid repeated connections"""
-    _instance = None
-    _llm_client = None
-    _current_provider = None
-    
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-        return cls._instance
-    
-    def get_client(self, preferred_provider: str = "openai", temperature: float = 0.0):
-        """Get or create LLM client with provider fallback"""
-        if self._llm_client is not None and self._current_provider == preferred_provider:
-            logger.info(f"✅ Reusing existing {preferred_provider} connection")
-            return self._llm_client
-        
-        # Define provider strategies with fallbacks
-        strategies = {
-            "openai": [create_openai_llm, create_sambanova_llm, create_nebius_llm],
-            "sambanova": [create_sambanova_llm, create_openai_llm, create_nebius_llm],
-            "nebius": [create_nebius_llm, create_openai_llm, create_sambanova_llm],
-            "gemini": [create_gemini_llm, create_sambanova_llm, create_nebius_llm]  
-        }
-
-        
-        factories = strategies.get(preferred_provider, strategies["openai"])
-        factory_names = {
-            create_openai_llm: "openai",
-            create_sambanova_llm: "sambanova",
-            create_nebius_llm: "nebius",
-            create_gemini_llm: "gemini"
-        }
-        
-        for factory in factories:
-            provider_name = factory_names.get(factory, "unknown")
-            try:
-                logger.info(f"🔄 Attempting to connect to {provider_name}...")
-                self._llm_client = factory(temperature=temperature)
-                self._current_provider = provider_name
-                logger.info(f"✅ Connected to {provider_name}")
-                return self._llm_client
-            except Exception as e:
-                logger.warning(f"⚠️ {provider_name} failed: {str(e)[:100]}")
-        
-        logger.error("❌ All LLM providers failed")
-        self._llm_client = None
-        self._current_provider = None
-        return None
 
 
 # Global singleton instance
@@ -170,7 +120,7 @@ def extract_file_list(zip_path):
         )
 
 # --- TAB 1: SINGLE FILE ANALYSIS ---
-def process_code_snippet_with_patterns(code_snippet: str, enrich_types: bool = False, provider: str = "sambanova"):
+def process_code_snippet_with_patterns(code_snippet: str, enrich_types: bool = False, provider: str = "nebius"):
     """
     Analyze single Python code snippet:
     1. Detect design patterns and recommendations
@@ -447,7 +397,7 @@ def process_zip_upload(zip_path, progress=gr.Progress()):
 
 # -- TAB 3 : USE CASE DIAGRAM ---
 
-def process_usecase_snippet(code_snippet: str, enrich: bool = True, provider: str = "sambanova"):
+def process_usecase_snippet(code_snippet: str, enrich: bool = True, provider: str = "nebius"):
     """TAB 1B: Single File Use Case Diagram"""
     if not code_snippet.strip():
         return "⚠️ Please enter some code.", None, gr.update(visible=False)
@@ -466,7 +416,7 @@ def process_usecase_snippet(code_snippet: str, enrich: bool = True, provider: st
     except Exception as e:
         return f"❌ Error: {e}", None, gr.update(visible=True, value=f"❌ Error")
 
-def process_folder_usecase(folder_path: str, enrich: bool = True, provider: str = "sambanova", progress=gr.Progress()):
+def process_folder_usecase(folder_path: str, enrich: bool = True, provider: str = "nebius", progress=gr.Progress()):
     """TAB 2B: Project Use Case Diagram - SINGLE COMBINED"""
     path_obj = Path(folder_path)
     
@@ -512,7 +462,7 @@ def process_folder_usecase(folder_path: str, enrich: bool = True, provider: str 
     except Exception as e:
         return f"❌ Error: {e}", None, gr.update(visible=True, value=f"❌ Failed")
 
-def process_folder_usecase_multi(folder_path: str, enrich: bool = True, provider: str = "sambanova", progress=gr.Progress()):
+def process_folder_usecase_multi(folder_path: str, enrich: bool = True, provider: str = "nebius", progress=gr.Progress()):
     """TAB 3: Project Use Case Diagrams - MULTIPLE BY MODULE"""
     path_obj = Path(folder_path)
     
@@ -600,7 +550,7 @@ def process_folder_usecase_multi(folder_path: str, enrich: bool = True, provider
         logging.error(f"Multi-diagram error: {error_detail}")
         return f"❌ Error: {e}\n\nDetails:\n{error_detail}", [], [], None, "", gr.update(visible=True, value=f"❌ Failed")
 
-def process_folder_usecase_multi_zip(zip_path, enrich: bool = True, provider: str = "sambanova", progress=gr.Progress()):
+def process_folder_usecase_multi_zip(zip_path, enrich: bool = True, provider: str = "nebius", progress=gr.Progress()):
     """TAB 3: Multi-Module Use Cases from ZIP file"""
     
     # ✅ FIX: Check if zip_path is provided and is a valid file
@@ -670,7 +620,7 @@ def process_folder_usecase_multi_zip(zip_path, enrich: bool = True, provider: st
         if "error" in diagrams_dict:
             return diagrams_dict["error"], [], [], None, "", gr.update(visible=True, value="❌ Failed")
         
-        progress(0.8, desc="🎨 Rendering diagrams...")
+        progress(0.8, desc="Rendering diagrams...")
         
         diagram_outputs = []
         
@@ -715,10 +665,8 @@ def process_folder_usecase_multi_zip(zip_path, enrich: bool = True, provider: st
     finally:
         safe_cleanup(temp_dir)
 
-
-
 # --- TAB 4: sequence diagrams ---
-def process_folder_sequence_multi_zip(zip_path, enrich: bool = False, provider: str = "sambanova", progress=gr.Progress()):
+def process_folder_sequence_multi_zip(zip_path, enrich: bool = False, provider: str = "nebius", progress=gr.Progress()):
     """TAB 4: Multi-Module Sequences from ZIP file"""
     
     # ✅ FIX: Check if zip_path is provided and is a valid file
@@ -834,7 +782,7 @@ def process_folder_sequence_multi_zip(zip_path, enrich: bool = False, provider: 
     finally:
         safe_cleanup(temp_dir)
 
-def process_sequence_snippet(code_snippet: str, entry_method: str = None, enrich: bool = True, provider: str = "sambanova"):
+def process_sequence_snippet(code_snippet: str, entry_method: str = None, enrich: bool = True, provider: str = "nebius"):
     """TAB 1C: Single File Sequence Diagram"""
     if not code_snippet.strip():
         return "⚠️ Please enter some code.", None, gr.update(visible=False), ""
@@ -860,7 +808,7 @@ def process_sequence_snippet(code_snippet: str, entry_method: str = None, enrich
     except Exception as e:
         return f"❌ Error: {e}", None, gr.update(visible=True, value=f"❌ Error"), ""
 
-def process_folder_sequence(folder_path: str, entry_method: str = None, enrich: bool = False, provider: str = "sambanova", progress=gr.Progress()):
+def process_folder_sequence(folder_path: str, entry_method: str = None, enrich: bool = False, provider: str = "nebius", progress=gr.Progress()):
     """TAB 2D: Project Sequence Diagram"""
     path_obj = Path(folder_path)
     
@@ -919,7 +867,7 @@ def process_folder_sequence(folder_path: str, entry_method: str = None, enrich: 
     except Exception as e:
         return f"❌ Error: {e}", None, gr.update(visible=True, value=f"❌ Failed"), ""
 
-def process_folder_sequence_multi(folder_path: str, enrich: bool = False, provider: str = "sambanova", progress=gr.Progress()):
+def process_folder_sequence_multi(folder_path: str, enrich: bool = False, provider: str = "nebius", progress=gr.Progress()):
     """TAB 6: Generate MULTIPLE sequence diagrams, one per module"""
     path_obj = Path(folder_path)
     
@@ -1009,7 +957,7 @@ def process_folder_sequence_multi(folder_path: str, enrich: bool = False, provid
         return f"❌ Error: {e}\n\nDetails:\n{error_detail}", [], [], None, "", gr.update(visible=True, value=f"❌ Failed")
 
 # --- TAB 5: AI PROPOSAL ---
-def process_proposal_zip(zip_path, provider: str = "sambanova", progress=gr.Progress()):
+def process_proposal_zip(zip_path, provider: str = "nebius", progress=gr.Progress()):
     """AI-powered architecture refactoring proposal"""
     if not zip_path:
         return "⚠️ Please upload a ZIP file.", None, None, gr.update(visible=True, value="⚠️ No File")
@@ -1061,94 +1009,123 @@ def process_proposal_zip(zip_path, provider: str = "sambanova", progress=gr.Prog
 # --- TAB 6: MODAL REFACTORING ---
 def run_modal_refactoring_zip(zip_path, file_path, instruction, test_path=None, progress=gr.Progress()):
     """Execute refactoring in Modal cloud sandbox"""
-    # Validation
+    
     if not zip_path:
         return "⚠️ Please upload a ZIP file.", gr.update(visible=False)
-    if not file_path or file_path.startswith("❌") or file_path.startswith("⚠️"):
+    if not file_path or file_path.startswith(("❌", "⚠️")):
         return "⚠️ Please select a valid Python file.", gr.update(visible=False)
-    if not instruction or not instruction.strip():
+    if not instruction.strip():
         return "⚠️ Please provide refactoring instructions.", gr.update(visible=False)
     
-    # Handle test file selection
     if test_path == "None (Skip tests)":
         test_path = None
     
-    temp_extract = None
+    temp_dir = None
     try:
-        temp_extract = tempfile.mkdtemp()
+        temp_dir = tempfile.mkdtemp()
         
-        progress(0.2, desc="📦 Extracting project...")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(temp_extract)
+        progress(0.2, desc="📦 Extracting ZIP...")
+        with zipfile.ZipFile(zip_path, 'r') as z:
+            z.extractall(temp_dir)
         
-        progress(0.4, desc="📄 Locating file...")
+        progress(0.4, desc="📄 Reading files...")
         
-        # FIX: Search for file in extracted directory
+        # ============ FIND FILES IN EXTRACTED ZIP ============
         target_file = None
-        for root, dirs, files in os.walk(temp_extract):
-            if file_path in root or file_path.endswith(os.path.basename(root)):
-                continue
-            potential_path = Path(root) / os.path.basename(file_path)
-            if potential_path.exists():
-                target_file = potential_path
-                break
+        test_file = None
         
-        # If not found, try direct path
+        for root, dirs, files in os.walk(temp_dir):
+            for f in files:
+                if not f.endswith('.py'):
+                    continue
+                    
+                full_path = Path(root) / f
+                rel_path = full_path.relative_to(temp_dir)
+                
+                # Match by relative path (handles nested folders)
+                if str(rel_path) == file_path or str(rel_path).replace('\\', '/') == file_path.replace('\\', '/'):
+                    target_file = full_path
+                
+                if test_path and (str(rel_path) == test_path or str(rel_path).replace('\\', '/') == test_path.replace('\\', '/')):
+                    test_file = full_path
+        
         if not target_file:
-            target_file = Path(temp_extract) / file_path
-        
-        if not target_file or not target_file.exists():
-            # List what we actually have for debugging
-            all_py_files = []
-            for root, dirs, files in os.walk(temp_extract):
+            all_py = []
+            for root, dirs, files in os.walk(temp_dir):
                 for f in files:
                     if f.endswith('.py'):
-                        rel_path = Path(root).relative_to(temp_extract) / f
-                        all_py_files.append(str(rel_path))
+                        rel = Path(root).relative_to(temp_dir) / f
+                        all_py.append(str(rel))
             
-            return f"❌ File not found: {file_path}\n\nAvailable files:\n" + "\n".join(all_py_files[:10]), gr.update(visible=False)
+            return f"❌ File not found: {file_path}\n\n📂 Available files:\n" + "\n".join(all_py[:15]), gr.update(visible=False)
         
-        progress(0.5, desc="📖 Reading file...")
+        # ============ READ CODE ============
         original_code = target_file.read_text(encoding='utf-8')
+        test_code = test_file.read_text(encoding='utf-8') if test_file else None
         
-        # Read test file
-        test_code = None
-        if test_path:
-            test_file = None
-            for root, dirs, files in os.walk(temp_extract):
-                potential_path = Path(root) / os.path.basename(test_path)
-                if potential_path.exists():
-                    test_file = potential_path
-                    break
-            
-            if test_file and test_file.exists():
-                test_code = test_file.read_text(encoding='utf-8')
+        logger.info(f"✓ Found target: {target_file.name} ({len(original_code)} chars)")
+        if test_file:
+            logger.info(f"✓ Found test: {test_file.name} ({len(test_code)} chars)")
         
-        progress(0.7, desc="☁️ Sending to Modal...")
+        progress(0.6, desc="☁️ Sending to Modal...")
         
-        # Call Modal
+        # ============ CALL MODAL WITH CODE CONTENT ============
         try:
-            from server import apply_refactoring_safely
+            # Import Modal function directly
+            import modal
+            modal_fn = modal.Function.from_name("architect-ai-surgeon", "safe_refactor_and_test")
             
-            # Use just the filename for Modal
-            file_name = os.path.basename(file_path)
-            result = apply_refactoring_safely(file_name, instruction, test_path)
+            # Call with CODE STRINGS (not paths!)
+            result = modal_fn.remote(
+                original_code,
+                instruction,
+                test_code
+            )
+            
+            # ============ CHECK RESULTS ============
+            if not result["success"]:
+                progress(1.0, desc="❌ Failed")
+                return f"❌ Refactoring failed:\n{result['error']}", gr.update(visible=False)
+            
+            if not result["test_results"]["passed"]:
+                progress(1.0, desc="⚠️ Tests failed")
+                return f"""⚠️ Code refactored but tests FAILED:
+
+{result['test_results']['output']}
+
+Code was NOT saved. Fix tests first.
+""", gr.update(visible=False)
+            
+            # ============ SAVE REFACTORED CODE ============
+            target_file.write_text(result["new_code"], encoding='utf-8')
             
             progress(1.0, desc="✅ Complete!")
-            return result, gr.update(visible=False)
+            
+            return f"""✅ Refactoring completed successfully!
+
+📊 Tests: PASSED ✓
+💾 File: {file_path}
+📏 Code: {len(result['new_code'])} chars
+
+🧪 Test output:
+{result['test_results']['output'][:500]}
+""", gr.update(visible=False)
             
         except ImportError:
-            return "⚠️ Modal not configured.", gr.update(visible=False)
+            return "⚠️ Modal not installed. Run: pip install modal", gr.update(visible=False)
         except Exception as modal_error:
             logger.error(f"Modal error: {modal_error}")
-            return f"❌ Modal failed: {str(modal_error)}", gr.update(visible=False)
+            import traceback
+            return f"❌ Modal failed: {modal_error}\n\n{traceback.format_exc()[:500]}", gr.update(visible=False)
             
     except Exception as e:
         logger.error(f"Refactoring error: {e}")
-        return f"❌ Error: {str(e)}", gr.update(visible=False)
+        import traceback
+        return f"❌ Error: {e}\n\n{traceback.format_exc()[:500]}", gr.update(visible=False)
     finally:
-        safe_cleanup(temp_extract)
-# --- CUSTOM CSS ---
+        safe_cleanup(temp_dir)
+
+#  --- CUSTOM CSS ---
 custom_css = """
 .gradio-container {
     font-family: 'Inter', sans-serif;
@@ -1286,6 +1263,7 @@ with gr.Blocks(
     with gr.Tabs():
         
         # TAB 1: Single File
+
         with gr.Tab("📄 Single File Analysis", id=0):
             gr.HTML('<div class="info-card"><strong>💡 Smart Analysis:</strong> Paste Python code to detect design patterns, get recommendations, and see before/after UML visualizations.</div>')
 
@@ -1310,7 +1288,7 @@ with gr.Blocks(
                     )
                     provider_choice = gr.Dropdown(
                         choices=["sambanova", "gemini", "nebius", "openai"],
-                        value="sambanova",
+                        value="nebius",
                         label="LLM Provider",
                         scale=1
                     )
@@ -1322,91 +1300,8 @@ with gr.Blocks(
                     elem_classes=["primary-button"]
                 )
 
-            # --- SECTION 2: READ ME / RECOMMENDATIONS ---
-            gr.Markdown("### 📖 Analysis & Recommendations")
-            with gr.Group(elem_classes=["output-card"]):
-                status_banner_1 = gr.Markdown(visible=False, elem_classes=["banner"])
-                pattern_report_single = gr.Markdown(
-                    value="*Analysis report will appear here after clicking Analyze...*"
-                )
-
-            # --- SECTION 3: UML CODE & DIAGRAM ---
-            gr.Markdown("### 🎨 UML Visualization")
-            with gr.Group(elem_classes=["output-card"]):
-                img_output_1 = gr.Image(
-                    label="Class Structure",
-                    type="pil",
-                    elem_classes=["diagram-container"]
-                )
-                with gr.Accordion("📝 PlantUML Source Code", open=False):
-                    text_output_1 = gr.Code(language="markdown", lines=10, label="UML Code")
-
-            # --- HIDDEN SECTION: PATTERN VISUALIZATION (Appears on demand) ---
-            with gr.Row(visible=False) as pattern_uml_section_single:
-                gr.HTML('<div class="info-card" style="margin-top: 2rem;"><strong>💡 Recommended Improvements:</strong> Visual comparison showing how design patterns can improve your code structure.</div>')
-            
-            with gr.Row(visible=False) as pattern_selector_section_single:
-                recommendation_dropdown_single = gr.Dropdown(
-                    label="📋 Select Recommendation to Visualize",
-                    choices=[],
-                    interactive=True
-                )
-            
-            with gr.Row(visible=False) as pattern_comparison_section_single:
-                with gr.Column(scale=1):
-                    gr.Markdown("#### ⚠️ Before (Current Structure)")
-                    with gr.Group(elem_classes=["output-card"]):
-                        pattern_before_img_single = gr.Image(
-                            label="Current Design",
-                            type="pil",
-                            elem_classes=["diagram-container"]
-                        )
-                    with gr.Accordion("📝 PlantUML Code", open=False):
-                        pattern_before_uml_single = gr.Code(language="markdown", lines=8)
-
-                with gr.Column(scale=1):
-                    gr.Markdown("#### ✅ After (Recommended Pattern)")
-                    with gr.Group(elem_classes=["output-card"]):
-                        pattern_after_img_single = gr.Image(
-                            label="Improved Design",
-                            type="pil",
-                            elem_classes=["diagram-container"]
-                        )
-                    with gr.Accordion("📝 PlantUML Code", open=False):
-                        pattern_after_uml_single = gr.Code(language="markdown", lines=8)
-            
-            # Event handlers
-            analyze_btn.click(
-                fn=process_code_snippet_with_patterns,
-                inputs=[code_input, enrich_checkbox, provider_choice],
-                outputs=[
-                    pattern_report_single,     
-                    text_output_1,               
-                    img_output_1,                
-                    status_banner_1,             
-                    pattern_uml_section_single,  
-                    pattern_comparison_section_single,
-                    recommendation_dropdown_single,
-                    pattern_before_img_single,
-                    pattern_after_img_single,
-                    pattern_before_uml_single,
-                    pattern_after_uml_single
-                ]
-            ).then(
-                fn=lambda x: x,
-                inputs=code_input,
-                outputs=stored_code
-            )
-            
-            recommendation_dropdown_single.change(
-                fn=update_single_file_recommendation,
-                inputs=[recommendation_dropdown_single, stored_code, enrich_checkbox, provider_choice],
-                outputs=[pattern_before_img_single, pattern_after_img_single, pattern_before_uml_single, pattern_after_uml_single]
-            )
-            
-            # EXAMPLES
             gr.Examples(
-                examples=[
+            examples=[
                     ["""# Strategy Pattern Example
 from abc import ABC, abstractmethod
 
@@ -1429,7 +1324,7 @@ class ShoppingCart:
     
     def checkout(self, total):
         return self.payment_strategy.pay(total)
-""", False, "sambanova"],
+""", False, "openai"],
                     ["""# Singleton Pattern Example
 class Database:
     _instance = None
@@ -1454,16 +1349,101 @@ class ProductFactory:
         elif product_type == "electronics":
             return Electronics()
         return None
-""", False, "sambanova"],
+""", True, "nebius"],
                 ],
                 inputs=[code_input, enrich_checkbox, provider_choice],
                 label="📚 Quick Examples - Click to Load"
             )
+            # --- SECTION 3: UML CODE & DIAGRAM ---
+            gr.Markdown("### 🎨 UML Visualization")
+            with gr.Group(elem_classes=["output-card"]):
+                img_output_1 = gr.Image(
+                    label="Class Structure",
+                    type="pil",
+                    elem_classes=["diagram-container"]
+                )
+                with gr.Accordion("📝 PlantUML Source Code", open=False):
+                    text_output_1 = gr.Code(language="markdown", lines=10, label="UML Code")
+
+            # --- SECTION: PATTERN VISUALIZATION (Appears on demand) ---
+            with gr.Row(visible=True) as pattern_uml_section_single:
+                gr.HTML('<div class="info-card" style="margin-top: 2rem;"><strong>💡 Recommended Improvements:</strong> Visual comparison showing how design patterns can improve your code structure.</div>')
+            
+            with gr.Row(visible=True) as pattern_selector_section_single:
+                recommendation_dropdown_single = gr.Dropdown(
+                    label="📋 Select Recommendation to Visualize",
+                    choices=[],
+                    interactive=True
+                )
+            
+            with gr.Row(visible=True) as pattern_comparison_section_single:
+                with gr.Column(scale=1):
+                    gr.Markdown("#### ⚠️ Before (Current Structure)")
+                    with gr.Group(elem_classes=["output-card"]):
+                        pattern_before_img_single = gr.Image(
+                            label="Current Design",
+                            type="pil",
+                            elem_classes=["diagram-container"]
+                        )
+                    with gr.Accordion("📝 PlantUML Code", open=False):
+                        pattern_before_uml_single = gr.Code(language="markdown", lines=8)
+
+                with gr.Column(scale=1):
+                    gr.Markdown("#### ✅ After (Recommended Pattern)")
+                    with gr.Group(elem_classes=["output-card"]):
+                        pattern_after_img_single = gr.Image(
+                            label="Improved Design",
+                            type="pil",
+                            elem_classes=["diagram-container"]
+                        )
+                    with gr.Accordion("📝 PlantUML Code", open=False):
+                        pattern_after_uml_single = gr.Code(language="markdown", lines=8)
+            
+
+            # --- SECTION 3: READ ME / RECOMMENDATIONS ---
+            gr.Markdown("### 📖 Analysis & Recommendations")
+            with gr.Group(elem_classes=["output-card"]):
+                status_banner_1 = gr.Markdown(visible=False, elem_classes=["banner"])
+                pattern_report_single = gr.Markdown(
+                    value="*Analysis report will appear here after clicking Analyze...*"
+                )
+
+
+            # Event handlers
+            analyze_btn.click(
+                fn=process_code_snippet_with_patterns,
+                inputs=[code_input, enrich_checkbox, provider_choice],
+                outputs=[
+                    pattern_report_single,     
+                    text_output_1,               
+
+                    img_output_1,                
+                    status_banner_1,             
+                    pattern_uml_section_single,  
+                    pattern_comparison_section_single,  # ← Controls visibility
+                    recommendation_dropdown_single,
+                    pattern_before_img_single,   # ← Updates "Before" image
+                    pattern_after_img_single,    # ← Updates "After" image
+                    pattern_before_uml_single,   # ← Updates "Before" UML code
+                    pattern_after_uml_single     # ← Updates "After" UML code
+                ]
+            ).then(
+                fn=lambda x: x,
+                inputs=code_input,
+                outputs=stored_code
+            )
+            
+            recommendation_dropdown_single.change(
+                fn=update_single_file_recommendation,
+                inputs=[recommendation_dropdown_single, stored_code, enrich_checkbox, provider_choice],
+                outputs=[pattern_before_img_single, pattern_after_img_single, pattern_before_uml_single, pattern_after_uml_single]
+            )
+            
 
         # TAB 2: Project Map
         with gr.Tab("📂 Project Map", id=1):
             gr.HTML('<div class="info-card"><strong>🗺️ Full Project Analysis:</strong> Upload a ZIP file to visualize all classes, relationships, and design patterns in your Python project. Works best with 5-50 files.</div>')
-
+            
             # Store the project structure for pattern detection
             stored_project_structure = gr.State(None)
             stored_project_code = gr.State(None)
@@ -1496,9 +1476,17 @@ class ProductFactory:
 
                     with gr.Accordion("📝 PlantUML Source", open=False):
                         text_output_2 = gr.Code(language="markdown", lines=10)
-            
+            # EXAMPLES
+            gr.Examples(
+                examples=[
+                    ["demo_ecommerce.zip"],
+                    ["demo_fastapi.zip"],
+                ],
+                inputs=project_zip,
+                label="⚡ Demo Projects (Click to Load)"
+            )
             # Pattern Detection Section (appears after diagram generation)
-            with gr.Row(visible=False) as pattern_section:
+            with gr.Row(visible=True) as pattern_section:
                 with gr.Column(scale=1):
                     gr.HTML('<div class="info-card"><strong>🏛️ Design Pattern Analysis:</strong> Detect existing patterns and get AI-powered recommendations for architectural improvements.</div>')
 
@@ -1510,7 +1498,7 @@ class ProductFactory:
                         )
                         pattern_provider_choice = gr.Dropdown(
                             choices=["sambanova", "gemini", "nebius", "openai"],
-                            value="sambanova",
+                            value="nebius",
                             label="LLM Provider",
                             scale=1
                         )
@@ -1518,34 +1506,27 @@ class ProductFactory:
                     detect_patterns_btn = gr.Button(
                         "🔍 Detect Patterns & Recommendations",
                         variant="secondary",
-                        size="lg"
+                        size="lg",
+                        elem_id="detect_patterns_btn"
                     )
 
                 with gr.Column(scale=2):
                     with gr.Group(elem_classes=["output-card"]):
                         pattern_status = gr.Markdown(visible=False, elem_classes=["banner"])
             
-            # Pattern Report Output
-            with gr.Row(visible=False) as pattern_results_section:
-                with gr.Column():
-                    with gr.Group(elem_classes=["output-card"]):
-                        pattern_report_output = gr.Markdown(
-                            label="📊 Pattern Analysis Report",
-                            value="*Waiting for analysis...*"
-                        )
 
             # Pattern UML Visualizations
-            with gr.Row(visible=False) as pattern_uml_section:
+            with gr.Row(visible=True) as pattern_uml_section:
                 gr.HTML('<div class="info-card"><strong>💡 Before & After:</strong> Visual comparison of current design vs. recommended pattern implementation.</div>')
 
-            with gr.Row(visible=False) as pattern_selector_section:
+            with gr.Row(visible=True) as pattern_selector_section:
                 recommendation_dropdown = gr.Dropdown(
                     label="📋 Select Recommendation to Visualize",
                     choices=[],
                     interactive=True
                 )
 
-            with gr.Row(visible=False) as pattern_comparison_section:
+            with gr.Row(visible=True) as pattern_comparison_section:
                 with gr.Column(scale=1):
                     gr.Markdown("#### ⚠️ Before (Current Structure)")
                     with gr.Group(elem_classes=["output-card"]):
@@ -1568,6 +1549,16 @@ class ProductFactory:
                     with gr.Accordion("📝 PlantUML Code", open=False):
                         pattern_after_uml = gr.Code(language="markdown", lines=8)
 
+            # Pattern Report Output
+            with gr.Row(visible=True) as pattern_results_section:
+                with gr.Column():
+                    with gr.Group(elem_classes=["output-card"]):
+                        pattern_report_output = gr.Markdown(
+                            label="📊 Pattern Analysis Report",
+                            value="*Waiting for analysis...*"
+                        )
+
+
             def process_pattern_detection_from_structure(structure, code, enrich: bool = True, provider: str = "openai", progress=gr.Progress()):
                 """
                 Analyze patterns using already-parsed structure and code.
@@ -1577,8 +1568,9 @@ class ProductFactory:
                 if not structure or not code:
                     logging.warning("⚠️ Pattern detection called without structure or code")
                     return (
-                        "⚠️ Please generate the class diagram first.",
-                        gr.update(visible=True, value="⚠️ No Data"),
+                        "⚠️ **Please generate the class diagram first.**\n\n1. Click an example below (demo_ecommerce.zip)\n2. Click '🔍 Scan Project'\n3. Then try pattern detection again",
+                        gr.update(visible=True, value="⚠️ No Data - Scan Project First"),
+                        gr.update(visible=True),  # Show the warning message
                         gr.update(visible=False),
                         gr.update(visible=False),
                         gr.update(visible=False),
@@ -1836,7 +1828,8 @@ class ProductFactory:
                     pattern_after_img,
                     pattern_before_uml,
                     pattern_after_uml
-                ]
+                ],
+                show_progress="full"  
             )
             recommendation_dropdown.change(
                 fn=update_recommendation_visualization,
@@ -1844,15 +1837,7 @@ class ProductFactory:
                 outputs=[pattern_before_img, pattern_after_img, pattern_before_uml, pattern_after_uml]
             )
             
-            # EXAMPLES
-            gr.Examples(
-                examples=[
-                    ["demo_ecommerce.zip"],
-                    ["demo_fastapi.zip"],
-                ],
-                inputs=project_zip,
-                label="⚡ Demo Projects (Click to Load)"
-            )
+            
 
         # TAB 3: MULTI-MODULE USE CASES
         
@@ -1870,7 +1855,7 @@ class ProductFactory:
                         )
                     
                     with gr.Row():
-                        multi_provider = gr.Dropdown(choices=["sambanova", "gemini", "nebius", "openai"], value="sambanova", label="LLM Provider")
+                        multi_provider = gr.Dropdown(choices=["sambanova", "gemini", "nebius", "openai"], value="nebius", label="LLM Provider")
                         multi_enrich = gr.Checkbox(label="✨ AI Enrichment", value=True, info="Better actor detection")
                     
                     multi_scan_btn = gr.Button("🔍 Generate Module Diagrams", variant="primary", size="lg", elem_classes=["primary-button"])
@@ -1878,7 +1863,15 @@ class ProductFactory:
                 with gr.Column(scale=1):
                     multi_status_banner = gr.Markdown(visible=False, elem_classes=["banner"])
                     multi_summary = gr.Textbox(label="Generated Diagrams", lines=5, interactive=False)
-            
+            # EXAMPLES
+            gr.Examples(
+                examples=[
+                    ["demo_ecommerce.zip"],
+                    ["demo_fastapi.zip"],
+                ],
+                inputs=multi_zip_input,
+                label="⚡ Demo Projects (Click to Load)"
+            )
             gr.Markdown("### 📊 Diagrams by Module")
             
             multi_gallery = gr.State([])
@@ -1901,15 +1894,7 @@ class ProductFactory:
             multi_scan_btn.click(fn=process_folder_usecase_multi_zip, inputs=[multi_zip_input, multi_enrich, multi_provider], outputs=[multi_summary, multi_gallery, multi_module_selector, multi_diagram_img, multi_diagram_puml, multi_status_banner])
             multi_module_selector.change(fn=update_diagram_viewer, inputs=[multi_gallery, multi_module_selector], outputs=[multi_diagram_img, multi_diagram_puml])
             
-            # EXAMPLES
-            gr.Examples(
-                examples=[
-                    ["demo_ecommerce.zip"],
-                    ["demo_fastapi.zip"],
-                ],
-                inputs=multi_zip_input,
-                label="⚡ Demo Projects (Click to Load)"
-            )
+            
         
         # TAB 4: MULTI-MODULE SEQUENCES
         with gr.Tab("🎬 Multi-Module Sequences", id=3):
@@ -1926,7 +1911,7 @@ class ProductFactory:
                     )
 
                     with gr.Row():
-                        seq_multi_provider = gr.Dropdown(choices=["sambanova", "gemini", "nebius", "openai"], value="sambanova", label="LLM Provider")
+                        seq_multi_provider = gr.Dropdown(choices=["sambanova", "gemini", "nebius", "openai"], value="nebius", label="LLM Provider")
                         seq_multi_enrich = gr.Checkbox(label="✨ AI Enrichment", value=False, info="Slow but better names")
                     
                     seq_multi_scan_btn = gr.Button("🔍 Generate Module Sequences", variant="primary", size="lg", elem_classes=["primary-button"])
@@ -1934,6 +1919,15 @@ class ProductFactory:
                 with gr.Column(scale=1):
                     seq_multi_status_banner = gr.Markdown(visible=False, elem_classes=["banner"])
                     seq_multi_summary = gr.Textbox(label="Generated Diagrams", lines=5, interactive=False)
+            # EXAMPLES
+            gr.Examples(
+                examples=[
+                    ["demo_ecommerce.zip"],
+                    ["demo_fastapi.zip"],
+                ],
+                inputs=seq_multi_zip_input,
+                label="⚡ Demo Projects (Click to Load)"
+            )
             
             gr.Markdown("### 🎬 Sequence Diagrams by Module")
             
@@ -1957,15 +1951,7 @@ class ProductFactory:
             seq_multi_scan_btn.click(fn=process_folder_sequence_multi_zip, inputs=[seq_multi_zip_input, seq_multi_enrich, seq_multi_provider], outputs=[seq_multi_summary, seq_multi_gallery, seq_multi_module_selector, seq_multi_diagram_img, seq_multi_diagram_puml, seq_multi_status_banner])
             seq_multi_module_selector.change(fn=update_seq_diagram_viewer, inputs=[seq_multi_gallery, seq_multi_module_selector], outputs=[seq_multi_diagram_img, seq_multi_diagram_puml])
             
-            # EXAMPLES
-            gr.Examples(
-                examples=[
-                    ["demo_ecommerce.zip"],
-                    ["demo_fastapi.zip"],
-                ],
-                inputs=seq_multi_zip_input,
-                label="⚡ Demo Projects (Click to Load)"
-            )
+            
     
 
         # TAB 5: AI PROPOSAL
@@ -1981,37 +1967,36 @@ class ProductFactory:
                     # Add provider dropdown
                     proposal_provider = gr.Dropdown(
                         choices=["sambanova", "gemini", "nebius", "openai"],
-                        value="sambanova",
+                        value="nebius",
                         label="LLM Provider",
                         info="Select AI provider for analysis"
                     )
                     
                     propose_btn = gr.Button("🧠 Generate Proposal", variant="primary", size="lg")
+                    gr.Examples(
+                        examples=[
+                            ["demo_ecommerce.zip"],
+                            ["demo_fastapi.zip"],
+                        ],
+                        inputs=proposal_zip,
+                        label="⚡ Demo Projects (Click to Load)"
+                    )
                     status_banner_3 = gr.Markdown(visible=False, elem_classes=["banner"])
                     proposal_output = gr.Code(language="json", label="📋 Analysis", lines=15)
+                    
                 
                 with gr.Column():
                     gr.Markdown("#### 📊 Results")
                     img_output_3 = gr.Image(label="🎨 Proposed Architecture", type="pil")
                     with gr.Accordion("📝 Proposed PlantUML", open=False):
                         text_output_3 = gr.Code(language="markdown", lines=10)
+                
             
             propose_btn.click(
                 fn=process_proposal_zip,
                 inputs=[proposal_zip, proposal_provider],
                 outputs=[proposal_output, text_output_3, img_output_3, status_banner_3]
             )
-            
-            # EXAMPLES
-            gr.Examples(
-                examples=[
-                    ["demo_ecommerce.zip"],
-                    ["demo_fastapi.zip"],
-                ],
-                inputs=proposal_zip,
-                label="⚡ Demo Projects (Click to Load)"
-            )
-        
         # TAB 6: Modal Refactoring
         with gr.Tab("☁️ Safe Refactoring", id=5):
             gr.Markdown("### Production-Safe Cloud Execution\nRefactor code in isolated Modal sandboxes with testing.")
@@ -2023,41 +2008,297 @@ class ProductFactory:
                     modal_zip = gr.File(label="📦 Upload Project (ZIP)", file_types=[".zip"], type="filepath")
                     file_dropdown = gr.Dropdown(label="Target File", choices=[], interactive=True)
                     test_dropdown = gr.Dropdown(label="Test File (Optional)", choices=[], interactive=True)
+                    
                     instruction_input = gr.Textbox(
                         label="Refactoring Instructions",
                         placeholder="Extract Strategy pattern for payment methods...",
                         lines=5
                     )
+                    # EXAMPLES
+                    gr.Examples(
+                        examples=[
+                            ["demo_ecommerce.zip"],
+                            ["demo_fastapi.zip"],
+                        ],
+                        inputs=modal_zip,
+                        label="⚡ Demo Projects (Click to Load)"
+                    )
+                                    
+                    # ============ PREDEFINED PROMPTS ============
+                    gr.Markdown("### 📝 Quick Prompts (Click to Use)")
+                    
+                    with gr.Row():
+                        with gr.Column(scale=1):
+                            gr.Markdown("**🏛️ Design Patterns**")
+                            prompt_strategy = gr.Button("Strategy Pattern", size="sm", variant="secondary")
+                            prompt_factory = gr.Button("Factory Pattern", size="sm", variant="secondary")
+                            prompt_singleton = gr.Button("Singleton Pattern", size="sm", variant="secondary")
+                            prompt_observer = gr.Button("Observer Pattern", size="sm", variant="secondary")
+                        
+                        with gr.Column(scale=1):
+                            gr.Markdown("**🧹 Code Quality**")
+                            prompt_docstrings = gr.Button("Add Docstrings", size="sm", variant="secondary")
+                            prompt_typing = gr.Button("Add Type Hints", size="sm", variant="secondary")
+                            prompt_error = gr.Button("Improve Error Handling", size="sm", variant="secondary")
+                            prompt_logging = gr.Button("Add Logging", size="sm", variant="secondary")
+                        
+                        with gr.Column(scale=1):
+                            gr.Markdown("**⚡ Performance**")
+                            prompt_async = gr.Button("Convert to Async", size="sm", variant="secondary")
+                            prompt_cache = gr.Button("Add Caching", size="sm", variant="secondary")
+                            prompt_optimize = gr.Button("Optimize Loops", size="sm", variant="secondary")
+                            prompt_lazy = gr.Button("Add Lazy Loading", size="sm", variant="secondary")
+                    
                     execute_btn = gr.Button("🚀 Execute in Modal", variant="stop", size="lg")
                 
                 with gr.Column():
                     gr.Markdown("#### 📊 Results")
                     modal_output = gr.Markdown(value="☁️ Waiting for execution...")
-                    download_output = gr.File(label="📥 Download", visible=False)
+                    
+                    # ============ ADD DOWNLOAD SECTION ============
+                    with gr.Group(visible=True) as download_section:
+                        gr.Markdown("### 📥 Download Refactored Code")
+                        refactored_code_preview = gr.Code(
+                            label="Preview (First 50 lines)",
+                            language="python",
+                            lines=20,
+                            interactive=False
+                        )
+                        download_file = gr.File(label="💾 Download Full File", visible=True)
             
-            # Auto-populate dropdowns on ZIP upload
+            # ============ PROMPT DEFINITIONS ============
+            PROMPTS = {
+                "strategy": """Refactor to use Strategy Pattern:
+
+        1. Extract conditional logic into separate strategy classes
+        2. Create a base Strategy interface (ABC)
+        3. Implement concrete strategy classes
+        4. Use dependency injection for the strategy
+        5. Keep existing public API unchanged
+
+        Example structure:
+        - BaseStrategy (ABC with execute method)
+        - ConcreteStrategyA, ConcreteStrategyB classes
+        - Context class that uses the strategy""",
+
+                "factory": """Refactor to use Factory Pattern:
+
+        1. Create a Factory class to handle object creation
+        2. Move instantiation logic out of client code
+        3. Support multiple product types
+        4. Use a registry pattern if needed
+        5. Add validation for product types
+
+        Example structure:
+        - ProductFactory class with create() method
+        - Product interface/base class
+        - Concrete product classes""",
+
+                "singleton": """Refactor to use Singleton Pattern:
+
+        1. Make __new__ return the same instance
+        2. Add _instance class variable
+        3. Thread-safe implementation with Lock if needed
+        4. Preserve existing public methods
+        5. Add reset() method for testing""",
+
+                "observer": """Refactor to use Observer Pattern:
+
+        1. Create Subject class to manage observers
+        2. Create Observer interface (ABC)
+        3. Implement notify mechanism
+        4. Add subscribe/unsubscribe methods
+        5. Support multiple observers""",
+
+                "docstrings": """Add comprehensive docstrings to all classes and methods using Google-style format with examples.""",
+
+                "typing": """Add Python type hints throughout the code using typing module (List, Dict, Optional, Union, Protocol).""",
+
+                "error": """Improve error handling with try-except blocks, custom exceptions, meaningful messages, and proper logging.""",
+
+                "logging": """Add comprehensive logging with INFO for operations, DEBUG for flow, ERROR for exceptions.""",
+
+                "async": """Convert synchronous code to async/await using asyncio, aiohttp, and proper async patterns.""",
+
+                "cache": """Add caching mechanism using functools.lru_cache, TTL, and cache invalidation strategies.""",
+
+                "optimize": """Optimize loops using list comprehensions, generators, enumerate, zip, and numpy where applicable.""",
+
+                "lazy": """Add lazy loading pattern using @property, lazy initialization, and on-demand resource loading."""
+            }
+            
+            # Store refactored code
+            refactored_code_state = gr.State("")
+            original_filename_state = gr.State("")
+            
+            # ============ IMPROVED EXECUTION FUNCTION ============
+            def run_modal_refactoring_with_download(zip_path, file_path, instruction, test_path=None, progress=gr.Progress()):
+                """Execute refactoring and prepare download"""
+                
+                if not zip_path:
+                    return "⚠️ Please upload a ZIP file.", gr.update(visible=False), "", "", ""
+                if not file_path or file_path.startswith(("❌", "⚠️")):
+                    return "⚠️ Please select a valid Python file.", gr.update(visible=False), "", "", ""
+                if not instruction.strip():
+                    return "⚠️ Please provide refactoring instructions.", gr.update(visible=False), "", "", ""
+                
+                if test_path == "None (Skip tests)":
+                    test_path = None
+                
+                temp_dir = None
+                try:
+                    temp_dir = tempfile.mkdtemp()
+                    
+                    progress(0.2, desc="📦 Extracting ZIP...")
+                    with zipfile.ZipFile(zip_path, 'r') as z:
+                        z.extractall(temp_dir)
+                    
+                    progress(0.4, desc="📄 Reading files...")
+                    
+                    # Find files
+                    target_file = None
+                    test_file = None
+                    
+                    for root, dirs, files in os.walk(temp_dir):
+                        for f in files:
+                            if not f.endswith('.py'):
+                                continue
+                                
+                            full_path = Path(root) / f
+                            rel_path = full_path.relative_to(temp_dir)
+                            
+                            if str(rel_path).replace('\\', '/') == file_path.replace('\\', '/'):
+                                target_file = full_path
+                            
+                            if test_path and str(rel_path).replace('\\', '/') == test_path.replace('\\', '/'):
+                                test_file = full_path
+                    
+                    if not target_file:
+                        all_py = []
+                        for root, dirs, files in os.walk(temp_dir):
+                            for f in files:
+                                if f.endswith('.py'):
+                                    rel = Path(root).relative_to(temp_dir) / f
+                                    all_py.append(str(rel))
+                        
+                        return f"❌ File not found: {file_path}\n\n📂 Available:\n" + "\n".join(all_py[:15]), gr.update(visible=False), "", "", ""
+                    
+                    # Read code
+                    original_code = target_file.read_text(encoding='utf-8')
+                    test_code = test_file.read_text(encoding='utf-8') if test_file else None
+                    
+                    logger.info(f"✓ Target: {target_file.name} ({len(original_code)} chars)")
+                    
+                    progress(0.6, desc="☁️ Sending to Modal (check Modal console for live progress)...")
+                    
+                    # Call Modal
+                    try:
+                        import modal
+                        modal_fn = modal.Function.from_name("architect-ai-surgeon", "safe_refactor_and_test")
+                        
+                        result = modal_fn.remote(original_code, instruction, test_code)
+                        
+                        if not result["success"]:
+                            progress(1.0, desc="❌ Failed")
+                            return f"❌ Refactoring failed:\n{result['error']}", gr.update(visible=False), "", "", ""
+                        
+                        if not result["test_results"]["passed"]:
+                            progress(1.0, desc="⚠️ Tests failed")
+                            return f"""⚠️ Code refactored but tests FAILED:
+
+        {result['test_results']['output']}
+
+        Code NOT saved. Fix tests first.
+        """, gr.update(visible=False), "", "", ""
+                        
+                        # Success - prepare download
+                        new_code = result["new_code"]
+                        
+                        # Save to temp file for download
+                        download_path = Path(tempfile.gettempdir()) / f"refactored_{target_file.name}"
+                        download_path.write_text(new_code, encoding='utf-8')
+                        
+                        # Preview (first 50 lines)
+                        preview_lines = new_code.split('\n')[:50]
+                        preview = '\n'.join(preview_lines)
+                        if len(new_code.split('\n')) > 50:
+                            preview += f"\n\n... ({len(new_code.split('\n')) - 50} more lines)"
+                        
+                        progress(1.0, desc="✅ Complete!")
+                        
+                        output_msg = f"""✅ Refactoring completed successfully!
+
+        📊 **Results:**
+        - File: `{file_path}`
+        - Original: {len(original_code)} chars, {len(original_code.split(chr(10)))} lines
+        - Refactored: {len(new_code)} chars, {len(new_code.split(chr(10)))} lines
+        - Change: {len(new_code) - len(original_code):+d} chars
+
+        🧪 **Tests:** PASSED ✓
+
+        📥 **Download ready below** (see preview and download button)
+
+        **Test output:**
+        ```
+        {result['test_results']['output'][:500]}
+        ```
+
+        💡 **Check Modal console for detailed execution logs**
+        """
+                        
+                        return (
+                            output_msg,
+                            gr.update(visible=True),  # Show download section
+                            preview,                   # Preview
+                            str(download_path),       # Download file
+                            new_code                   # Store in state
+                        )
+                        
+                    except ImportError:
+                        return "⚠️ Modal not installed. Run: pip install modal", gr.update(visible=False), "", "", ""
+                    except Exception as e:
+                        logger.error(f"Modal error: {e}")
+                        import traceback
+                        return f"❌ Modal failed: {e}\n\n{traceback.format_exc()[:500]}", gr.update(visible=False), "", "", ""
+                        
+                except Exception as e:
+                    logger.error(f"Error: {e}")
+                    import traceback
+                    return f"❌ Error: {e}\n\n{traceback.format_exc()[:500]}", gr.update(visible=False), "", "", ""
+                finally:
+                    safe_cleanup(temp_dir)
+            
+            # Auto-populate dropdowns
             modal_zip.change(
                 fn=extract_file_list,
                 inputs=modal_zip,
                 outputs=[file_dropdown, test_dropdown]
             )
             
+            # Execute button
             execute_btn.click(
-                fn=run_modal_refactoring_zip,
+                fn=run_modal_refactoring_with_download,
                 inputs=[modal_zip, file_dropdown, instruction_input, test_dropdown],
-                outputs=[modal_output, download_output]
+                outputs=[modal_output, download_section, refactored_code_preview, download_file, refactored_code_state],
+                show_progress="full"
             )
             
-            # EXAMPLES
-            gr.Examples(
-                examples=[
-                    ["demo_ecommerce.zip"],
-                    ["demo_fastapi.zip"],
-                ],
-                inputs=modal_zip,
-                label="⚡ Demo Projects (Click to Load)"
-            )
+            # Prompt buttons
+            prompt_strategy.click(lambda: PROMPTS["strategy"], outputs=instruction_input)
+            prompt_factory.click(lambda: PROMPTS["factory"], outputs=instruction_input)
+            prompt_singleton.click(lambda: PROMPTS["singleton"], outputs=instruction_input)
+            prompt_observer.click(lambda: PROMPTS["observer"], outputs=instruction_input)
+            prompt_docstrings.click(lambda: PROMPTS["docstrings"], outputs=instruction_input)
+            prompt_typing.click(lambda: PROMPTS["typing"], outputs=instruction_input)
+            prompt_error.click(lambda: PROMPTS["error"], outputs=instruction_input)
+            prompt_logging.click(lambda: PROMPTS["logging"], outputs=instruction_input)
+            prompt_async.click(lambda: PROMPTS["async"], outputs=instruction_input)
+            prompt_cache.click(lambda: PROMPTS["cache"], outputs=instruction_input)
+            prompt_optimize.click(lambda: PROMPTS["optimize"], outputs=instruction_input)
+            prompt_lazy.click(lambda: PROMPTS["lazy"], outputs=instruction_input)
     
+    
+
     # FOOTER
     gr.HTML("""
         <div class="footer">

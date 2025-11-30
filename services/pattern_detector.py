@@ -805,7 +805,7 @@ class PatternDetectionService:
     def __init__(self, llm=None):
         self.llm = llm
         self.detector = None
-        self.recommender = PatternRecommender()
+        self.recommender = PatternRecommender(llm)  
         self.enricher = PatternEnricher(llm) if llm else None
     
     def analyze_code(self, code: str, enrich: bool = True) -> Dict[str, Any]:

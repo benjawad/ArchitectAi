@@ -1,6 +1,6 @@
 ---
 title: Architectai Mcp
-emoji: 🐨
+emoji: 🏛️
 colorFrom: pink
 colorTo: purple
 sdk: gradio

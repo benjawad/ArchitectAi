@@ -20,124 +20,179 @@ image = (
 app = modal.App("architect-ai-surgeon")
 
 # --- 2. Define the Remote Refactoring Function ---
-@app.function(  # Changed decorator from @stub to @app
+@app.function(
     image=image,
     secrets=[modal.Secret.from_name("my-openai-secret")],
     timeout=600,
     cpu=1.0,      
     memory=1024   
 )
-def safe_refactor_and_test(original_code: str, instruction: str, test_code: str = None) -> dict:
+def safe_refactor_and_test(
+    original_code: str, 
+    instruction: str, 
+    test_code: str = None
+) -> dict:
     """
-    Run refactoring in the cloud.
+    Refactor code in cloud with testing.
+    Shows progress in Modal console.
     """
     from langchain_core.messages import SystemMessage, HumanMessage
     from langchain_openai import ChatOpenAI
+    import ast
+    
+    # ============ CONSOLE OUTPUT ============
+    print("=" * 60)
+    print("🚀 MODAL CLOUD REFACTORING SESSION")
+    print("=" * 60)
+    print(f"📋 Instruction: {instruction[:100]}...")
+    print(f"📏 Code size: {len(original_code)} characters")
+    print(f"🧪 Tests: {'Provided' if test_code else 'None (syntax check only)'}")
+    print("-" * 60)
 
-    print(f"🔧 Starting Cloud Refactoring task...")
-
-    # --- PHASE 1: The Surgery (AI Refactoring) ---
+    # ============ PHASE 1: AI REFACTORING ============
+    print("\n🤖 PHASE 1: AI REFACTORING")
+    print("-" * 60)
+    
     try:
-        llm = ChatOpenAI(model="gpt-4o", temperature=0.0)
+        print("⏳ Initializing GPT-4o-mini...")
+        llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.0)
 
-        system_prompt = (
-            "You are a Senior Python Refactoring Engineer. "
-            "Your goal is to rewrite the provided code to meet the user's architectural instructions "
-            "while preserving the original business logic and passing all tests."
-        )
+        prompt = f"""Refactor this Python code according to these instructions:
 
-        user_prompt = f"""
-        **Task:** Refactor this Python code.
-        
-        **Instructions:** {instruction}
-        
-        **Constraints:**
-        1. Return ONLY the full valid Python code.
-        2. Do NOT use Markdown blocks (```python).
-        3. Do NOT add explanations or chat.
-        4. Preserve imports unless they need to change for the new architecture.
-        
-        **Original Code:**
-        {original_code}
-        """
+**Instructions:** {instruction}
 
+**Original Code:**
+```python
+{original_code}
+```
+
+Return ONLY the refactored Python code. No markdown blocks, no explanations.
+"""
+
+        print("⏳ Sending request to OpenAI...")
         response = llm.invoke([
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_prompt)
+            SystemMessage(content="You are a Python refactoring expert. Return only valid Python code."),
+            HumanMessage(content=prompt)
         ])
         
-        new_code = response.content
-        # Clean up markdown if present
-        if new_code.startswith("```python"):
-            new_code = new_code.replace("```python", "", 1)
-        if new_code.startswith("```"):
-            new_code = new_code.replace("```", "", 1)
-        if new_code.endswith("```"):
-            new_code = new_code[:-3]
+        new_code = response.content.strip()
         
-        new_code = new_code.strip()
+        # Clean markdown if present
+        if "```python" in new_code:
+            new_code = new_code.split("```python")[1].split("```")[0].strip()
+        elif "```" in new_code:
+            new_code = new_code.split("```")[1].split("```")[0].strip()
+
+        print(f"✅ Refactored successfully ({len(new_code)} chars)")
+        print(f"📊 Code change: {len(new_code) - len(original_code):+d} characters")
 
     except Exception as e:
+        print(f"❌ LLM FAILED: {str(e)}")
+        print("=" * 60)
         return {
             "success": False,
-            "error": f"LLM Generation Failed: {str(e)}",
+            "error": f"LLM failed: {str(e)}",
             "new_code": None,
-            "test_results": {"passed": False, "output": "LLM Error"}
+            "test_results": {"passed": False, "output": str(e)}
         }
 
-    # --- PHASE 2: The Checkup (Verification & Testing) ---
+    # ============ PHASE 2: VALIDATION ============
+    print("\n🔍 PHASE 2: VALIDATION")
+    print("-" * 60)
+    
+    # Step 1: Syntax check
+    print("⏳ Checking syntax...")
+    try:
+        ast.parse(new_code)
+        print("✅ Syntax valid")
+    except SyntaxError as e:
+        print(f"❌ SYNTAX ERROR at line {e.lineno}: {e.msg}")
+        print("=" * 60)
+        return {
+            "success": False,
+            "error": f"Syntax error: {e}",
+            "new_code": new_code,
+            "test_results": {"passed": False, "output": f"Line {e.lineno}: {e.msg}"}
+        }
+    
+    # Step 2: Run tests (if provided)
     if not test_code:
-        try:
-            print("🔍 No tests provided. Running Syntax Check...")
-            compile(new_code, 'refactored_module.py', 'exec')
-            test_results = {
+        print("ℹ️  No tests provided - skipping test execution")
+        print("=" * 60)
+        print("✅ REFACTORING COMPLETE (Syntax OK)")
+        print("=" * 60)
+        return {
+            "success": True,
+            "error": None,
+            "new_code": new_code,
+            "test_results": {
                 "passed": True, 
-                "output": "✅ Syntax Check Passed. (No unit tests were provided for deep verification)."
+                "output": "✅ Syntax check passed (no tests provided)"
             }
-        except SyntaxError as e:
-            return {
-                "success": False,
-                "error": f"Generated code has Syntax Errors: {e}",
-                "new_code": new_code,
-                "test_results": {"passed": False, "output": str(e)}
+        }
+    
+    # Run pytest
+    print("\n🧪 PHASE 3: TESTING")
+    print("-" * 60)
+    print(f"⏳ Running pytest on {len(test_code)} chars of test code...")
+    
+    with tempfile.TemporaryDirectory() as tmp:
+        # Write refactored code
+        code_file = os.path.join(tmp, "refactored.py")
+        with open(code_file, "w") as f:
+            f.write(new_code)
+        
+        # Write tests
+        test_file = os.path.join(tmp, "test_refactored.py")
+        
+        # Fix imports in test
+        fixed_test = test_code.replace(
+            "from services.", "from refactored."
+        ).replace(
+            "import target_module", "import refactored as target_module"
+        )
+        
+        with open(test_file, "w") as f:
+            f.write(fixed_test)
+        
+        # Run pytest with verbose output
+        result = subprocess.run(
+            [sys.executable, "-m", "pytest", test_file, "-v", "--tb=short"],
+            capture_output=True,
+            text=True,
+            cwd=tmp,
+            env={**os.environ, "PYTHONPATH": tmp}
+        )
+        
+        passed = result.returncode == 0
+        
+        # Print test results to console
+        print("\n📊 TEST RESULTS:")
+        print("-" * 60)
+        if passed:
+            print("✅ ALL TESTS PASSED")
+        else:
+            print("❌ TESTS FAILED")
+        
+        print("\nTest Output:")
+        print(result.stdout)
+        if result.stderr:
+            print("\nErrors:")
+            print(result.stderr)
+        
+        print("=" * 60)
+        if passed:
+            print("🎉 REFACTORING SUCCESSFUL - ALL CHECKS PASSED")
+        else:
+            print("⚠️  REFACTORING COMPLETE BUT TESTS FAILED")
+        print("=" * 60)
+        
+        return {
+            "success": True,
+            "error": None,
+            "new_code": new_code,
+            "test_results": {
+                "passed": passed,
+                "output": result.stdout + result.stderr
             }
-
-    else:
-        print("🧪 Running provided Unit Tests...")
-        with tempfile.TemporaryDirectory() as temp_dir:
-            module_path = os.path.join(temp_dir, "target_module.py")
-            with open(module_path, "w", encoding="utf-8") as f:
-                f.write(new_code)
-            
-            test_path = os.path.join(temp_dir, "test_suite.py")
-            
-            # Adjust imports for the test environment
-            # This handles imports like 'from services import...' 
-            adjusted_test_code = test_code.replace("from services import", "# from services import") \
-                                          .replace("import target_module", "") 
-            
-            with open(test_path, "w", encoding="utf-8") as f:
-                f.write(test_code)
-
-            env = os.environ.copy()
-            env["PYTHONPATH"] = temp_dir
-
-            result = subprocess.run(
-                ["pytest", test_path],
-                capture_output=True,
-                text=True,
-                env=env,
-                cwd=temp_dir
-            )
-
-            test_results = {
-                "passed": result.returncode == 0,
-                "output": result.stdout + "\n" + result.stderr
-            }
-
-    return {
-        "success": True,
-        "error": None,
-        "new_code": new_code,
-        "test_results": test_results
-    }
+        }
