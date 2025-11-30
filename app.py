@@ -12,7 +12,6 @@ from pathlib import Path
 from PIL import Image
 from plantuml import PlantUML
 
-from server import LLMClientSingleton
 from services.pattern_detector import PatternDetectionService, PatternRecommendation
 from services.sequence_service import CallGraphVisitor, ProjectSequenceAnalyzer, SequenceDiagramService
 from services.usecase_service import UseCaseDiagramService
@@ -41,6 +40,45 @@ logger = logging.getLogger(__name__)
 PLANTUML_SERVER_URL = 'http://www.plantuml.com/plantuml/img/'
 plantuml_client = PlantUML(url=PLANTUML_SERVER_URL)
 
+# --- SINGLETON LLM CLIENT ---
+class LLMClientSingleton:
+    """Singleton pattern for LLM client to avoid repeated connections"""
+    _instance = None
+    _llm_client = None
+    _current_provider = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    def get_client(self, preferred_provider: str = "openai", temperature: float = 0.0):
+        """Get or create LLM client with provider fallback"""
+        if self._llm_client is not None and self._current_provider == preferred_provider:
+            return self._llm_client
+        
+        # Define provider strategies with fallbacks
+        strategies = {
+            "openai": [create_openai_llm, create_sambanova_llm, create_nebius_llm],
+            "sambanova": [create_sambanova_llm, create_openai_llm, create_nebius_llm],
+            "nebius": [create_nebius_llm, create_openai_llm, create_sambanova_llm], 
+            "gemini": [create_gemini_llm, create_sambanova_llm, create_nebius_llm], 
+        }
+        
+        factories = strategies.get(preferred_provider, strategies["nebius"])
+        names = ["openai", "sambanova", "nebius", "gemini"]
+        
+        for factory, name in zip(factories, names):
+            try:
+                self._llm_client = factory(temperature=temperature)
+                self._current_provider = name
+                logger.info(f"✅ Connected to {name}")
+                return self._llm_client
+            except Exception as e:
+                logger.warning(f"⚠️ {name} failed: {str(e)[:100]}")
+        
+        logger.error("❌ All LLM providers failed")
+        return None
 
 # Global singleton instance
 _llm_singleton = LLMClientSingleton()
