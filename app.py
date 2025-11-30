@@ -12,7 +12,7 @@ from pathlib import Path
 from PIL import Image
 from plantuml import PlantUML
 
-from a import LLMClientSingleton
+from server import LLMClientSingleton
 from services.pattern_detector import PatternDetectionService, PatternRecommendation
 from services.sequence_service import CallGraphVisitor, ProjectSequenceAnalyzer, SequenceDiagramService
 from services.usecase_service import UseCaseDiagramService
