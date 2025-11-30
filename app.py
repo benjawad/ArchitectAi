@@ -2219,10 +2219,10 @@ class ProductFactory:
                         download_path.write_text(new_code, encoding='utf-8')
                         
                         # Preview (first 50 lines)
-                        preview_lines = new_code.split('\n')[:50]
+                        preview_lines = new_code.splitlines()[:50]
                         preview = '\n'.join(preview_lines)
-                        if len(new_code.split('\n')) > 50:
-                            preview += f"\n\n... ({len(new_code.split('\n')) - 50} more lines)"
+                        if len(new_code.splitlines()) > 50:
+                            preview += f"\n\n... ({len(new_code.splitlines()) - 50} more lines)"
                         
                         progress(1.0, desc="✅ Complete!")
                         
