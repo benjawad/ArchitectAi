@@ -16,3 +16,4 @@ modal
 radon
 gitpython
 zipfile38
+pytest

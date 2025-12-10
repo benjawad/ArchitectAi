@@ -109,12 +109,10 @@ class PatternDetectorAST(ast.NodeVisitor):
             evidence = []
             score = 0.0
             
-            # Check for __new__ override (strong indicator)
             if info["has_new"]:
                 evidence.append("Overrides __new__ method")
                 score += 0.4
             
-            # Check for _instance class variable
             instance_vars = [v for v in info["class_vars"] 
                            if "instance" in v.lower() or v.startswith("_")]
             if instance_vars:

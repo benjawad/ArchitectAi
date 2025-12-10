@@ -2,7 +2,7 @@
 Application settings and configuration.
 """
 from pydantic_settings import BaseSettings
-from pydantic import AnyHttpUrl, Field
+from pydantic import AnyHttpUrl, Field, ConfigDict
 from typing import List
 import os
 from dotenv import load_dotenv
@@ -37,42 +37,41 @@ class Settings(BaseSettings):
     # OPENAI_API_KEY: str | None = Field(None, env="OPENAI_API_KEY")
     # OPENAI_ENDPOINT: AnyHttpUrl | None = Field(None, env="OPENAI_ENDPOINT")
     # LANGSMITH_API_KEY: str | None = Field(None, env="LANGSMITH_API_KEY")
-    sambanova_api_key: str | None = Field(None, env="SAMBANOVA_API_KEY")
-    nebius_api_key: str | None = Field(None, env="NEBIUS_API_KEY")
+    sambanova_api_key: str | None = Field(None, validation_alias="SAMBANOVA_API_KEY")
+    nebius_api_key: str | None = Field(None, validation_alias="NEBIUS_API_KEY")
     
     # LLM Configuration
     MODEL_NAME: str = "llama-3.3-70b-versatile"
     TEMPERATURE: float = 0.0
-    ENV: str = Field("development", env="ENV")
+    ENV: str = Field("development", validation_alias="ENV")
     
     # Nebius LLM Configuration
-    NEBIUS_API_KEY: str | None = Field(None, env="NEBIUS_API_KEY")
-    NEBIUS_ENDPOINT: str | None = Field(None, env="NEBIUS_ENDPOINT")
+    NEBIUS_API_KEY: str | None = Field(None, validation_alias="NEBIUS_API_KEY")
+    NEBIUS_ENDPOINT: str | None = Field(None, validation_alias="NEBIUS_ENDPOINT")
     
     # SambaNova LLM Configuration
-    SAMBANOVA_API_KEY: str | None = Field(None, env="SAMBANOVA_API_KEY")
-    SAMBANOVA_ENDPOINT: str | None = Field(None, env="SAMBANOVA_ENDPOINT")
+    SAMBANOVA_API_KEY: str | None = Field(None, validation_alias="SAMBANOVA_API_KEY")
+    SAMBANOVA_ENDPOINT: str | None = Field(None, validation_alias="SAMBANOVA_ENDPOINT")
     
     # OpenAI LLM Configuration
-    OPENAI_API_KEY: str | None = Field(None, env="OPENAI_API_KEY")
-
+    OPENAI_API_KEY: str | None = Field(None, validation_alias="OPENAI_API_KEY")
     # Gemini LLM Configuration
-    GEMINI_API_KEY: str | None = Field(None, env="GEMINI_API_KEY")
+    GEMINI_API_KEY: str | None = Field(None, validation_alias="GEMINI_API_KEY")
 
     # ========== MCP Configuration ==========
     # GitHub MCP
-    GITHUB_TOKEN: str | None = Field(None, env="GITHUB_TOKEN")
+    GITHUB_TOKEN: str | None = Field(None, validation_alias="GITHUB_TOKEN")
     
     # PostgreSQL MCP
-    POSTGRES_CONNECTION_STRING: str | None = Field(None, env="POSTGRES_CONNECTION_STRING")
+    POSTGRES_CONNECTION_STRING: str | None = Field(None, validation_alias="POSTGRES_CONNECTION_STRING")
     
     # Filesystem MCP
-    MCP_ALLOWED_DIRECTORIES: str = Field(".", env="MCP_ALLOWED_DIRECTORIES")
+    MCP_ALLOWED_DIRECTORIES: str = Field(".", validation_alias="MCP_ALLOWED_DIRECTORIES")
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False  # Allow both GROQ_API_KEY and groq_api_key
-
+    model_config = ConfigDict(
+            env_file=".env",
+            env_file_encoding="utf-8",
+            case_sensitive=False
+        )
 # Create settings instance
 settings = Settings()

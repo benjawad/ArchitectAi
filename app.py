@@ -2854,9 +2854,9 @@ details[open] summary {
 
 
 if __name__ == "__main__":
+    port = int(os.getenv("BL_SERVER_PORT", 80))
     demo.launch(
-        server_name="0.0.0.0",
-        server_port=7860,
+        server_port=port,
         share=False,
         theme=architectai_theme,
         css=architectai_css,
