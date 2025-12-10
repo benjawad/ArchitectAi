@@ -1,8 +1,111 @@
-.venv/
-venv/
-env/
-ENV/
+# Python
 __pycache__/
-*.pyc
-a.py
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+ENV/
+env/
+.venv
 .env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+pytest.ini
+coverage.xml
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+temp/
+tmp/
+
+# OS
+.DS_Store
+Thumbs.db
+*.bak
+*.swp
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.dll
+*.dylib
+*.exe
+
+# Node (if used)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# LLM/API Keys (IMPORTANT!)
+.env
+*.key
+*.pem
+secrets/
+
+# Project specific
+output/
+results/
+temp_projects/
+*.plantuml
+*.puml
+
+# Git
+.git/
